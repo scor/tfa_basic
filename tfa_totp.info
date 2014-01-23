@@ -1,0 +1,8 @@
+name = "TFA TOTP Plugin"
+description = "TFA plugin for Time-based One Time Passwords"
+core = 7.x
+
+dependencies[] = tfa
+
+files[] = tfa_totp.inc
+files[] = includes/googleauthenticator/GoogleAuthenticator.php
