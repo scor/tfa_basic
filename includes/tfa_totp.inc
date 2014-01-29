@@ -26,8 +26,9 @@ class TfaTotp extends TfaBasePlugin implements TfaValidationPluginInterface {
     parent::__construct($context);
     $this->ga = new PHPGangsta_GoogleAuthenticator();
     // Allow codes within tolerance range of 2 * 30 second units.
-    $this->timeSkew = variable_get('tfa_totp_time_skew', 2);
-    $this->encryptionKey = variable_get('tfa_totp_secret_key', ''); // Set in settings.php.
+    $this->timeSkew = variable_get('tfa_basic_time_skew', 2);
+    // Recommended: set variable tfa_totp_secret_key in settings.php.
+    $this->encryptionKey = variable_get('tfa_basic_secret_key', drupal_get_private_key());
   }
 
   /**
@@ -119,13 +120,26 @@ class TfaTotpSetup extends TfaTotp implements TfaSetupPluginInterface {
     parent::__construct($context);
     // Generate seed.
     $this->seed = $this->createSeed();
-    $this->namePrefix = variable_get('tfa_totp_name_prefix', variable_get('site_name', 'Drupal'));
+    $this->namePrefix = variable_get('tfa_basic_name_prefix', variable_get('site_name', 'Drupal'));
   }
 
   /**
    * @copydoc TfaSetupPluginInterface::getSetupForm()
    */
   public function getSetupForm(array $form, array &$form_state) {
+    $items = array(
+      l('Google Authenticator (for Android/iPhone/BlackBerry)', 'https://support.google.com/accounts/answer/1066447?hl=en'),
+      l('Authy (for Android/iPhone)', 'https://www.authy.com/thefuture#install-now'),
+      l('Authenticator (for Windows Phone 7)', 'http://www.windowsphone.com/en-us/store/app/authenticator/021dd79f-0598-e011-986b-78e7d1fa76f8'),
+    );
+    $form['apps'] = array(
+      '#type' => 'markup',
+      '#markup' => theme('item_list', array('items' => $items, 'title' => t('Choose an application to install on your smartphone or tablet device:'))),
+    );
+    $form['info'] = array(
+      '#type' => 'markup',
+      '#markup' => t('<p>The two-factor authentication application will be used during this setup and for generating codes during regular authentication. If the application supports it, scan the QR code below to get the setup code otherwise you can manually enter the text code.</p>'),
+    );
     // Optional show text seed.
     $form['show_seed'] = array(
       '#type' => 'checkbox',
@@ -135,18 +149,21 @@ class TfaTotpSetup extends TfaTotp implements TfaSetupPluginInterface {
       '#type' => 'textfield',
       '#value' => $this->seed,
       '#disabled' => TRUE,
+      '#description' => t('Enter this code into your two-factor authentication app.'),
       '#states' => array(
         'visible' => array(
           ':input[name="show_seed"]' => array('checked' => TRUE)
         )
       ),
     );
-    // QR image of seed. @todo add alt
+    // QR image of seed.
     $form['qr_image'] = array(
-      '#markup' => '<img src="' . $this->getQrCodeUrl($this->seed) .'">',
+      '#markup' => '<img src="' . $this->getQrCodeUrl($this->seed) .'" alt="QR code for TFA setup">',
     );
     // Include code entry form.
     $form = $this->getForm($form, $form_state);
+    // Alter code description.
+    $form['code']['#description'] = t('A verification code will be generated after you scan the above QR code or manually enter the setup code. The verification code is six digits long.');
     return $form;
   }
 
@@ -232,7 +249,7 @@ class TfaTotpSetup extends TfaTotp implements TfaSetupPluginInterface {
    */
   protected function accountName() {
     $account = user_load($this->context['uid']);
-    return urlencode($this->namePrefix . '-' . $account->mail);
+    return urlencode($this->namePrefix . '-' . $account->name);
   }
 
 }

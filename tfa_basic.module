@@ -1,0 +1,183 @@
+<?php
+
+/**
+ * Implements hook_permission().
+ */
+function tfa_basic_permission() {
+  return array(
+    'setup tfa basic' => array(
+      'title' => t('Setup TFA for account'),
+      'description' => t('Allow users with role to setup TFA for their account.'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function tfa_basic_menu() {
+  $items = array();
+
+  $items['user/%user/tfa-setup'] = array(
+    'title' => 'TFA Setup',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('tfa_basic_setup_form', 1),
+    'access arguments' => array('setup tfa basic'),
+    'type' => MENU_LOCAL_TASK,
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_cron().
+ */
+function tfa_basic_cron() {
+  // Delete trusted device entries older than expiration.
+  $expiration = variable_get('tfa_basic_trust_cookie_expiration', 3600 * 24 * 30);
+
+  $num_deleted = db_delete('tfa_trusted_device')
+    ->condition('created', REQUEST_TIME - $expiration, '<')
+    ->execute();
+  if ($num_deleted) {
+    watchdog('TFA', 'Removed !num TFA trusted devices older than !time', array('!num' => $num_deleted, '!time' => REQUEST_TIME - $expiration), WATCHDOG_INFO);
+  }
+}
+
+/**
+ * Implements hook_tfa_api().
+ */
+function tfa_basic_tfa_api() {
+  return array(
+    'tfa_basic_totp' => array(
+      'class' => 'TfaTotp',
+      'name' => 'TOTP',
+    ),
+    'tfa_basic_trusted_device' => array(
+      'class' => 'TfaTrustedDevice',
+      'name' => 'Trusted device',
+    ),
+  );
+}
+
+/**
+ * Get created timestamp if account has setup TOTP TFA.
+ *
+ * @param $account
+ * @return string
+ */
+function tfa_basic_get_created($account) {
+  $result = db_query("SELECT created FROM {tfa_totp_seed} WHERE uid = :uid", array(':uid' => $account->uid))->fetchAssoc();
+  if (!empty($result)) {
+    return $result['created'];
+  }
+  return '';
+}
+
+/**
+ * TFA TOTP setup form.
+ */
+function tfa_basic_setup_form($form, &$form_state, $account) {
+
+  if (empty($form_state['storage'])) {
+    $created = tfa_basic_get_created($account);
+    if (!empty($created)) {
+      $form['info'] = array(
+        '#type' => 'markup',
+        '#markup' => t('<p>TFA enabled !time.</p>', array('!time' => format_date($created))),
+      );
+      $form['disclaimer'] = array(
+        '#type' => 'markup',
+        '#markup' => t('<p>Note, if you begin TFA setup again you should also delete the corresponding account in your smartphone or tablet app.</p>'),
+      );
+    }
+    $form['app'] = array(
+      '#type' => 'submit',
+      '#value' => t('Setup TFA application'),
+    );
+  }
+  else {
+    $tfaSetup = $form_state['storage']['tfa_setup'];
+    $form = $tfaSetup->getForm($form, $form_state);
+  }
+  // Set account element.
+  $form['account'] = array(
+    '#type' => 'value',
+    '#value' => $account,
+  );
+  return $form;
+}
+
+function tfa_basic_setup_form_validate($form, &$form_state) {
+  if (empty($form_state['storage'])) {
+    return;
+  }
+  $tfaSetup = $form_state['storage']['tfa_setup'];
+  if (!$tfaSetup->validateForm($form, $form_state)) {
+    foreach ($tfaSetup->getErrorMessages() as $element => $message) {
+      form_set_error($element, $message);
+    }
+  }
+}
+
+function tfa_basic_setup_form_submit($form, &$form_state) {
+  $account = $form['account']['#value'];
+
+  if (isset($form_state['values']['app']) && $form_state['values']['op'] === $form_state['values']['app']) {
+    // Create TfaSetup process.
+    $tfaSetup = new TfaSetup(array('setup' => 'TfaTotpSetup'), array('uid' => $account->uid));
+    // Store TfaSetup in storage.
+    $form_state['storage']['tfa_setup'] = $tfaSetup;
+    $form_state['rebuild'] = TRUE;
+  }
+  elseif (!empty($form_state['storage']['tfa_setup'])) {
+    $tfaSetup = $form_state['storage']['tfa_setup'];
+    if ($tfaSetup->submitForm($form, $form_state)) {
+      drupal_set_message('Setup complete');
+      $form_state['redirect'] = 'user';
+    }
+    else {
+      // Setup isn't complete so rebuild.
+      $form_state['rebuild'] = TRUE;
+    }
+  }
+}
+
+function tfa_basic_form_tfa_admin_settings_alter(&$form, &$form_state, $form_id) {
+  global $base_url;
+  // Add cookie domain
+  $form['tfa_basic_cookie_domain'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Cookie domain'),
+    '#default_value' => variable_get('tfa_basic_cookie_domain', '.' . $base_url),
+    '#description' => t('Domain to set for the trusted device TFA cookie.'),
+    '#states' => array(
+      'visible' => array(
+        ':input[name="tfa_login[tfa_basic_trusted_device]"]' => array('checked' => TRUE)
+      )
+    ),
+  );
+  $form['#validate'][] = 'tfa_basic_form_validate';
+  $form['#submit'][] = 'tfa_basic_form_submit';
+}
+
+function tfa_basic_form_validate($form, &$form_state) {
+  $login = array();
+  if (!empty($form_state['values']['tfa_login'])) {
+    foreach ($form_state['values']['tfa_login'] as $key => $enabled) {
+      if ($enabled) {
+        $login[] = $key;
+      }
+    }
+
+    if (!empty($login) && in_array('tfa_basic_trusted_device', $login) && empty($form_state['values']['tfa_basic_cookie_domain'])) {
+      form_set_error('tfa_basic_cookie_domain', t('Cookie domain is required if Trusted device plugin is enabled.'));
+    }
+  }
+}
+
+function tfa_basic_form_submit($form, &$form_state) {
+  if (!empty($form_state['values']['tfa_basic_cookie_domain'])) {
+    variable_set('tfa_basic_cookie_domain', $form_state['values']['tfa_basic_cookie_domain']);
+  }
+}
