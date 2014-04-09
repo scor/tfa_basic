@@ -22,7 +22,6 @@ function tfa_basic_overview($account) {
       );
       $devices = tfa_basic_get_trusted_devices($account);
       if (!empty($devices)) {
-        dpm($devices);
         $items = array();
         foreach ($devices as $device) {
           $message = t('@browser last used !time', array('@browser' => $device['name'], '!time' => !empty($device['last_used']) ? format_date($device['last_used']) : t('never')));
