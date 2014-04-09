@@ -5,6 +5,34 @@
  */
 function tfa_basic_schema() {
 
+  $schema['tfa_user_settings'] = array(
+    'fields' => array(
+      'uid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'saved' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'status' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'data' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+    ),
+    'primary key' => array('uid'),
+  );
+
   $schema['tfa_totp_seed'] = array(
     'fields' => array(
       'uid' => array(
@@ -49,6 +77,11 @@ function tfa_basic_schema() {
         'default' => '',
       ),
       'created' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'last_used' => array(
         'type' => 'int',
         'not null' => TRUE,
         'default' => 0,

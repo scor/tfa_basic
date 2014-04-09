@@ -5,9 +5,9 @@
  */
 function tfa_basic_permission() {
   return array(
-    'setup tfa basic' => array(
+    'setup own tfa' => array(
       'title' => t('Setup TFA for account'),
-      'description' => t('Allow users with role to setup TFA for their account.'),
+      'description' => t('Allow users to setup TFA for their account. Users with "administer users" permission can edit other accounts TFA.'),
     ),
   );
 }
@@ -18,15 +18,49 @@ function tfa_basic_permission() {
 function tfa_basic_menu() {
   $items = array();
 
-  $items['user/%user/tfa-setup'] = array(
-    'title' => 'TFA Setup',
+  $items['user/%user/tfa'] = array(
+    'title' => 'TFA',
+    'page callback' => 'tfa_basic_overview',
+    'page arguments' => array(1),
+    'access callback' => 'tfa_basic_setup_access',
+    'access arguments' => array(1, 'setup own tfa'),
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'tfa_basic.pages.inc',
+  );
+  $items['user/%user/tfa/disable'] = array(
+    'title' => 'TFA disable',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('tfa_basic_disable_form', 1),
+    'access callback' => 'tfa_basic_setup_access',
+    'access arguments' => array(1, 'setup own tfa'),
+    'type' => MENU_CALLBACK,
+    'file' => 'tfa_basic.pages.inc',
+  );
+  $items['user/%user/tfa/setup'] = array(
+    'title' => 'TFA setup',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('tfa_basic_setup_form', 1),
-    'access arguments' => array('setup tfa basic'),
-    'type' => MENU_LOCAL_TASK,
+    'access callback' => 'tfa_basic_setup_access',
+    'access arguments' => array(1, 'setup own tfa'),
+    'type' => MENU_CALLBACK,
+    'file' => 'tfa_basic.pages.inc',
   );
 
   return $items;
+}
+
+/**
+ * Access control.
+ *
+ * @param object $account
+ * @param string $permission
+ * @return bool
+ */
+function tfa_basic_setup_access($account, $permission = '') {
+  $administer_users = user_access('administer users') && $account->uid > 0;
+  $is_account = ($GLOBALS['user']->uid == $account->uid);
+
+  return ($is_account && user_access($permission, $account)) || $administer_users;
 }
 
 /**
@@ -61,91 +95,134 @@ function tfa_basic_tfa_api() {
 }
 
 /**
- * Get created timestamp if account has setup TOTP TFA.
- *
- * @param $account
- * @return string
+ * Alters tfa_context array to set plugins from user settings.
  */
-function tfa_basic_get_created($account) {
-  $result = db_query("SELECT created FROM {tfa_totp_seed} WHERE uid = :uid", array(':uid' => $account->uid))->fetchAssoc();
-  if (!empty($result)) {
-    return $result['created'];
+function tfa_basic_tfa_context_alter(&$context) {
+  $api = module_invoke_all('tfa_api');
+
+  $account = user_load($context['uid']);
+  $tfa_data = tfa_basic_get_tfa_data($account);
+  if (empty($tfa_data['status']) || empty($tfa_data['data']['primary'])) {
+    return;
   }
-  return '';
+  switch ($tfa_data['data']['primary']) {
+    case 'app':
+      $primary_plugin = 'tfa_basic_totp';
+      break;
+  }
+  // Replace validate plugin with user's.
+  if (!empty($primary_plugin) && array_key_exists($primary_plugin, $api)) {
+    $context['plugins']['validate'] = $api[$primary_plugin]['class'];
+  }
+  // If the user setup a fallback method add it.
+  if (!empty($fallback_plugin)) {
+    array_unshift($context['plugins']['fallback'], $api[$fallback_plugin]['class']);
+  }
 }
 
 /**
- * TFA TOTP setup form.
+ * Get TFA data for an account
+ *
+ * @param object $account
+ * @return array
  */
-function tfa_basic_setup_form($form, &$form_state, $account) {
+function tfa_basic_get_tfa_data($account) {
+  $result = db_query("SELECT status, saved, data FROM {tfa_user_settings} WHERE uid = :uid", array(':uid' => $account->uid))->fetchAssoc();
+  if (!empty($result)) {
+    $data = array();
+    if (!empty($result['data'])) {
+      $data = json_decode($result['data'], TRUE);
+    }
+    $tfa = array(
+      'status' => $result['status'] == '1' ? TRUE : FALSE,
+      'saved' => $result['saved'],
+      'data' => $data,
+    );
+    return $tfa;
+  }
+  return array();
+}
 
-  if (empty($form_state['storage'])) {
-    $created = tfa_basic_get_created($account);
-    if (!empty($created)) {
-      $form['info'] = array(
-        '#type' => 'markup',
-        '#markup' => t('<p>TFA enabled !time.</p>', array('!time' => format_date($created))),
-      );
-      $form['disclaimer'] = array(
-        '#type' => 'markup',
-        '#markup' => t('<p>Note, if you begin TFA setup again you should also delete the corresponding account in your smartphone or tablet app.</p>'),
+/**
+ * Get accounts trusted devices.
+ *
+ * @param $account
+ * @return array
+ *   'id'
+ *   'name'
+ *   'ip'
+ *   'created'
+ *   'last_used'
+ */
+function tfa_basic_get_trusted_devices($account) {
+  $devices = array();
+  $result = db_query("SELECT did, name, ip, created, last_used FROM {tfa_trusted_device} WHERE uid = :uid", array(':uid' => $account->uid));
+  if ($result) {
+    foreach ($result as $row) {
+      $devices[] = array(
+        'id' => $row->did,
+        'name' => $row->name,
+        'created' => $row->created,
+        'ip' => $row->ip,
+        'last_used' => $row->last_used,
       );
     }
-    $form['app'] = array(
-      '#type' => 'submit',
-      '#value' => t('Setup TFA application'),
-    );
+  }
+  return $devices;
+}
+
+/**
+ * Save TFA settings for an account.
+ *
+ * @param object $account
+ * @param array $data TFA data
+ * @code
+ *   array(
+ *     'method' => 'app',
+ *     'primary' => FALSE,
+ *     'recovery' => TRUE,
+ *     'status' => TRUE,
+ *   )
+ * @endcode
+ */
+function tfa_basic_setup_save_data($account, $data) {
+  // Check if existing data and update.
+  $existing = tfa_basic_get_tfa_data($account);
+  if (!empty($existing['data'])) {
+    $tfa_data = $existing['data'];
   }
   else {
-    $tfaSetup = $form_state['storage']['tfa_setup'];
-    $form = $tfaSetup->getForm($form, $form_state);
+    $tfa_data = array();
   }
-  // Set account element.
-  $form['account'] = array(
-    '#type' => 'value',
-    '#value' => $account,
+  if (isset($data['method'])) {
+    $tfa_data['primary'] = $data['method'];
+  }
+  $status = 1;
+  if (isset($data['status']) && $data['status'] === FALSE) {
+    $tfa_data = array();
+    $status = 0;
+  }
+
+  $record = array(
+    'uid' => $account->uid,
+    'saved' => REQUEST_TIME,
+    'status' =>  $status,
+    'data' => json_encode($tfa_data),
   );
-  return $form;
-}
-
-function tfa_basic_setup_form_validate($form, &$form_state) {
-  if (empty($form_state['storage'])) {
-    return;
+  if (!empty($existing)) {
+    drupal_write_record('tfa_user_settings', $record, 'uid');
   }
-  $tfaSetup = $form_state['storage']['tfa_setup'];
-  if (!$tfaSetup->validateForm($form, $form_state)) {
-    foreach ($tfaSetup->getErrorMessages() as $element => $message) {
-      form_set_error($element, $message);
-    }
+  else {
+    drupal_write_record('tfa_user_settings', $record);
   }
 }
 
-function tfa_basic_setup_form_submit($form, &$form_state) {
-  $account = $form['account']['#value'];
-
-  if (isset($form_state['values']['app']) && $form_state['values']['op'] === $form_state['values']['app']) {
-    // Create TfaSetup process.
-    $tfaSetup = new TfaSetup(array('setup' => 'TfaTotpSetup'), array('uid' => $account->uid));
-    // Store TfaSetup in storage.
-    $form_state['storage']['tfa_setup'] = $tfaSetup;
-    $form_state['rebuild'] = TRUE;
-  }
-  elseif (!empty($form_state['storage']['tfa_setup'])) {
-    $tfaSetup = $form_state['storage']['tfa_setup'];
-    if ($tfaSetup->submitForm($form, $form_state)) {
-      drupal_set_message('Setup complete');
-      $form_state['redirect'] = 'user';
-    }
-    else {
-      // Setup isn't complete so rebuild.
-      $form_state['rebuild'] = TRUE;
-    }
-  }
-}
-
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
 function tfa_basic_form_tfa_admin_settings_alter(&$form, &$form_state, $form_id) {
   global $base_url;
-  // Add cookie domain
+  // Add cookie domain field to TFA admin settings.
   $form['tfa_basic_cookie_domain'] = array(
     '#type' => 'textfield',
     '#title' => t('Cookie domain'),
@@ -161,6 +238,9 @@ function tfa_basic_form_tfa_admin_settings_alter(&$form, &$form_state, $form_id)
   $form['#submit'][] = 'tfa_basic_form_submit';
 }
 
+/**
+ * Validation for TFA admin settings alter.
+ */
 function tfa_basic_form_validate($form, &$form_state) {
   $login = array();
   if (!empty($form_state['values']['tfa_login'])) {
@@ -176,6 +256,9 @@ function tfa_basic_form_validate($form, &$form_state) {
   }
 }
 
+/**
+ * Submit for TFA admin settings alter.
+ */
 function tfa_basic_form_submit($form, &$form_state) {
   if (!empty($form_state['values']['tfa_basic_cookie_domain'])) {
     variable_set('tfa_basic_cookie_domain', $form_state['values']['tfa_basic_cookie_domain']);

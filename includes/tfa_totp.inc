@@ -39,14 +39,15 @@ class TfaTotp extends TfaBasePlugin implements TfaValidationPluginInterface {
   }
 
   /**
-   * @copydoc TfaBasePlugin::getForm()
+   * @copydoc TfaValidationPluginInterface::getForm()
    */
   public function getForm(array $form, array &$form_state) {
     $form['code'] = array(
       '#type' => 'textfield',
       '#title' => t('Verification code'),
-      '#description' => t('Verification code is application generated and six digits long.'),
+      '#description' => t('Verification code is application generated and !length digits long.', array('!length' => $this->codeLength)),
       '#required' => TRUE,
+      '#attributes' => array('autocomplete' => 'off'),
     );
     $form['actions']['login'] = array(
       '#type' => 'submit',
@@ -57,7 +58,7 @@ class TfaTotp extends TfaBasePlugin implements TfaValidationPluginInterface {
   }
 
   /**
-   * @copydoc TfaBasePlugin::validateForm()
+   * @copydoc TfaValidationPluginInterface::validateForm()
    */
   public function validateForm(array $form, array &$form_state) {
     if (!$this->validate($form_state['values']['code'])) {
@@ -75,8 +76,8 @@ class TfaTotp extends TfaBasePlugin implements TfaValidationPluginInterface {
   protected function validate($code) {
     // Get OTP seed.
     $seed = $this->getSeed();
-    $this->valid = ($seed && $this->ga->verifyCode($seed, $code, $this->timeSkew));
-    return $this->valid;
+    $this->isValid = ($seed && $this->ga->verifyCode($seed, $code, $this->timeSkew));
+    return $this->isValid;
   }
 
   /**
@@ -128,33 +129,24 @@ class TfaTotpSetup extends TfaTotp implements TfaSetupPluginInterface {
    */
   public function getSetupForm(array $form, array &$form_state) {
     $items = array(
-      l('Google Authenticator (for Android/iPhone/BlackBerry)', 'https://support.google.com/accounts/answer/1066447?hl=en'),
-      l('Authy (for Android/iPhone)', 'https://www.authy.com/thefuture#install-now'),
-      l('Authenticator (for Windows Phone 7)', 'http://www.windowsphone.com/en-us/store/app/authenticator/021dd79f-0598-e011-986b-78e7d1fa76f8'),
+      l('Google Authenticator (Android/iPhone/BlackBerry)', 'https://support.google.com/accounts/answer/1066447?hl=en'),
+      l('Authy (Android/iPhone)', 'https://www.authy.com/thefuture#install-now'),
+      l('Authenticator (Windows Phone)', 'http://www.windowsphone.com/en-us/store/app/authenticator/021dd79f-0598-e011-986b-78e7d1fa76f8'),
+      l('FreeOTP (Android)', 'https://play.google.com/store/apps/details?id=org.fedorahosted.freeotp'),
     );
     $form['apps'] = array(
       '#type' => 'markup',
-      '#markup' => theme('item_list', array('items' => $items, 'title' => t('Choose an application to install on your smartphone or tablet device:'))),
+      '#markup' => theme('item_list', array('items' => $items, 'title' => t('Install authentication code application on your smartphone or tablet device:'))),
     );
     $form['info'] = array(
       '#type' => 'markup',
       '#markup' => t('<p>The two-factor authentication application will be used during this setup and for generating codes during regular authentication. If the application supports it, scan the QR code below to get the setup code otherwise you can manually enter the text code.</p>'),
     );
-    // Optional show text seed.
-    $form['show_seed'] = array(
-      '#type' => 'checkbox',
-      '#title' => t('Show text code'),
-    );
     $form['seed'] = array(
       '#type' => 'textfield',
       '#value' => $this->seed,
       '#disabled' => TRUE,
-      '#description' => t('Enter this code into your two-factor authentication app.'),
-      '#states' => array(
-        'visible' => array(
-          ':input[name="show_seed"]' => array('checked' => TRUE)
-        )
-      ),
+      '#description' => t('Enter this code into your two-factor authentication app or scan the QR code below.'),
     );
     // QR image of seed.
     $form['qr_image'] = array(
