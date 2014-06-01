@@ -13,7 +13,7 @@ function tfa_basic_overview($account) {
     $status = $data['status'] ? t('Enabled') : t('Disabled');
     $output['status'] = array(
       '#type' => 'markup',
-      '#markup' => '<p>'. t('Two factor authentication status: <strong>!status</strong>', array('!status' => $status)) . '</p>',
+      '#markup' => '<p>'. t('Two-factor authentication status: <strong>!status</strong>', array('!status' => $status)) . '</p>',
     );
     if ($data['status']) {
       $output['method'] = array(
@@ -40,13 +40,13 @@ function tfa_basic_overview($account) {
     );
     $output['setup'] = array(
       '#type' => 'markup',
-      '#markup' => '<p>'. l('Alter two factor authentication for your account', $edit_url) . '</p>',
+      '#markup' => '<p>'. l('Alter two-factor authentication for your account', $edit_url) . '</p>',
     );
   }
   else {
     $output['setup'] = array(
       '#type' => 'markup',
-      '#markup' => '<p>'. l('Set up two factor authentication for your account', $edit_url) . '</p>',
+      '#markup' => '<p>'. l('Set up two-factor authentication for your account', $edit_url) . '</p>',
     );
   }
 
@@ -60,12 +60,12 @@ function tfa_basic_disable_form($form, &$form_state, $account) {
   $form['preamble'] = array(
     '#prefix' => '<p class="preamble">',
     '#suffix' => '</p>',
-    '#markup' => t('Are you sure you want to disable your two factor authentication setup?'),
+    '#markup' => t('Are you sure you want to disable your two-factor authentication setup?'),
   );
   $form['notice'] = array(
     '#prefix' => '<p class="preamble">',
     '#suffix' => '</p>',
-    '#markup' => t("Your setttings and data will be lost. You can re-enable two factor authentication again from your profile."),
+    '#markup' => t("Your setttings and data will be lost. You can re-enable two-factor authentication again from your profile."),
   );
   if (user_access('require tfa', $account)) {
     drupal_set_message(t('Your account must have at least one two-factor authentication method enabled. Continuing will disable your ability to log back into this site.'), 'warning');
@@ -133,7 +133,7 @@ function tfa_basic_disable_form_submit($form, &$form_state) {
   // E-mail account to inform them that it has been disabled.
   drupal_mail('tfa_basic', 'disable', $account->mail, user_preferred_language($account), $params);
 
-  drupal_set_message(t('Two factor authentication is now disabled.'));
+  drupal_set_message(t('Two-factor authentication is now disabled.'));
   $form_state['redirect'] = 'user/' . $account->uid . '/tfa';
 }
 
@@ -153,7 +153,7 @@ function tfa_basic_setup_form($form, &$form_state, $account) {
       $form['disable'] = array(
         '#prefix' => '<p>',
         '#suffix' => '</p>',
-        '#markup' => l(t('Disable two-step verification'), 'user/' . $account->uid . '/tfa/disable'),
+        '#markup' => l(t('Disable two-factor verification'), 'user/' . $account->uid . '/tfa/disable'),
       );
     }
     // Setup selection.
