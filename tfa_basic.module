@@ -201,6 +201,8 @@ function tfa_basic_setup_save_data($account, $data) {
   if (isset($data['status']) && $data['status'] === FALSE) {
     $tfa_data = array();
     $status = 0;
+    $tfa = new TfaTotp(array('uid' => $account->uid));
+    $tfa->deleteSeed();
   }
 
   $record = array(

@@ -97,6 +97,18 @@ class TfaTotp extends TfaBasePlugin implements TfaValidationPluginInterface {
     }
     return FALSE;
   }
+
+  /**
+   * Delete users seeds.
+   *
+   * @return int
+   */
+  public function deleteSeed() {
+    $query = db_delete('tfa_totp_seed')
+      ->condition('uid', $this->context['uid']);
+
+    return $query->execute();
+  }
 }
 
 /**

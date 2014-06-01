@@ -54,6 +54,7 @@ function tfa_basic_overview($account) {
 }
 
 function tfa_basic_disable_form($form, &$form_state, $account) {
+
   $form_state['storage']['account'] = $account;
 
   $form['preamble'] = array(
@@ -66,6 +67,10 @@ function tfa_basic_disable_form($form, &$form_state, $account) {
     '#suffix' => '</p>',
     '#markup' => t("Your setttings and data will be lost. You can re-enable two factor authentication again from your profile."),
   );
+  if (user_access('require tfa', $account)) {
+    drupal_set_message(t('Your account must have at least one two-factor authentication method enabled. Continuing will disable your ability to log back into this site.'), 'warning');
+    $form['notice']['#markup'] = t('Your setttings and data will be lost and you will be unable to log back into the site. To regain access contact a site administrator.');
+  }
 
   $form['account']['current_pass'] = array(
     '#type' => 'password',
@@ -120,7 +125,7 @@ function tfa_basic_disable_form_submit($form, &$form_state) {
   $params = array('account' => $account);
   tfa_basic_setup_save_data($account, array('status' => FALSE));
 
-  watchdog('TFA', 'TFA disabed for user @name UID !uid', array(
+  watchdog('TFA', 'TFA disabled for user @name UID !uid', array(
     '@name' => $account->name,
     '!uid' => $account->uid,
   ), WATCHDOG_NOTICE);
