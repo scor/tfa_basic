@@ -49,6 +49,15 @@ class TfaTotp extends TfaBasePlugin implements TfaValidationPluginInterface {
       '#required' => TRUE,
       '#attributes' => array('autocomplete' => 'off'),
     );
+    $current_pass_description = t('Enter your current password to enable two-factor authentication.');
+    $form['current_pass'] = array(
+      '#type' => 'password',
+      '#title' => t('Current password'),
+      '#size' => 25,
+      '#description' => $current_pass_description,
+      '#attributes' => array('autocomplete' => 'off'),
+    );
+
     $form['actions']['login'] = array(
       '#type' => 'submit',
       '#value' => t('Verify'),

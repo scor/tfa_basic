@@ -74,7 +74,7 @@ function tfa_basic_cron() {
     ->condition('created', REQUEST_TIME - $expiration, '<')
     ->execute();
   if ($num_deleted) {
-    watchdog('TFA', 'Removed !num TFA trusted devices older than !time', array('!num' => $num_deleted, '!time' => REQUEST_TIME - $expiration), WATCHDOG_INFO);
+    watchdog('tfa', 'Removed !num TFA trusted devices older than !time', array('!num' => $num_deleted, '!time' => REQUEST_TIME - $expiration), WATCHDOG_INFO);
   }
 }
 
@@ -265,4 +265,70 @@ function tfa_basic_form_submit($form, &$form_state) {
   if (!empty($form_state['values']['tfa_basic_cookie_domain'])) {
     variable_set('tfa_basic_cookie_domain', $form_state['values']['tfa_basic_cookie_domain']);
   }
+}
+
+/**
+ * Implements hook_mail().
+ */
+function tfa_basic_mail($key, &$message, $params) {
+  switch ($key) {
+    case 'tfa_basic_tfa_enabled':
+      $message['subject'] = t('Your @site_name account now has two-factor authentication', array('@site_name' => variable_get('site_name', 'Drupal')));
+      $message['body']['body'] = tfa_basic_tfa_enabled_body($message, $params);
+      break;
+
+    case 'tfa_basic_disabled_configuration':
+      $message['subject'] = t('Your @site_name account no longer has two-factor authentication', array('@site_name' => variable_get('site_name', 'Drupal')));
+      $message['body']['body'] = tfa_basic_tfa_disabled_body($message, $params);
+      break;
+
+  }
+}
+
+/**
+ * Returns text appropriate for an email when someone has enabled tfa.
+ *
+ * @param array $message
+ *   The message, must include the language.
+ * @param array $params
+ *   Parameters from drupal_mail. Must include the account.
+ *
+ * @return string
+ *   Message body.
+ */
+function tfa_basic_tfa_enabled_body($message, $params) {
+  $text = t("[user:name],
+
+Thanks for configuring two-factor authentication on your @site_name account!
+
+This additional level of security will help to ensure that only you are able to log in to your account.
+
+If you ever lose the device you configured, you should act quickly to delete its association with this account.
+
+-- @site_name team", array('@site_name' => variable_get('site_name', 'Drupal')));
+
+  return token_replace($text, array('user' => $params['account']), array('language' => $message['language'], 'sanitize' => FALSE, 'clear' => TRUE));
+}
+
+/**
+ * Returns text appropriate for an email when someone has disabled tfa.
+ *
+ * @param array $message
+ *   The message, must include the language.
+ * @param array $params
+ *   Parameters from drupal_mail. Must include the account.
+ *
+ * @return string
+ *   Message body.
+ */
+function tfa_basic_tfa_disabled_body($message, $params) {
+  $text = t("[user:name],
+
+Two-factor authentication has been disabled on your account.
+
+If you did not take this action, please contact a site administrator immediately.
+
+-- @site_name team", array('@site_name' => variable_get('site_name', 'Drupal')));
+
+  return token_replace($text, array('user' => $params['account']), array('language' => $message['language'], 'sanitize' => FALSE, 'clear' => TRUE));
 }

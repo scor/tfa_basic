@@ -125,7 +125,7 @@ function tfa_basic_disable_form_submit($form, &$form_state) {
   $params = array('account' => $account);
   tfa_basic_setup_save_data($account, array('status' => FALSE));
 
-  watchdog('TFA', 'TFA disabled for user @name UID !uid', array(
+  watchdog('tfa', 'TFA disabled for user @name UID !uid', array(
     '@name' => $account->name,
     '!uid' => $account->uid,
   ), WATCHDOG_NOTICE);
@@ -213,6 +213,14 @@ function tfa_basic_setup_form_validate($form, &$form_state) {
   elseif ($form_state['values']['op'] === $form_state['values']['cancel']) {
     return;
   }
+  $account = $form['account']['#value'];
+  // Check password. (from user.module user_validate_current_pass()).
+  require_once DRUPAL_ROOT . '/' . variable_get('password_inc', 'includes/password.inc');
+  $current_pass = user_check_password($form_state['values']['current_pass'], $account);
+  if (!$current_pass) {
+    form_set_error('current_pass', t("Incorrect password."));
+  }
+
   $tfaSetup = $form_state['storage']['tfa_setup'];
   if (!$tfaSetup->validateForm($form, $form_state)) {
     foreach ($tfaSetup->getErrorMessages() as $element => $message) {
@@ -267,6 +275,14 @@ function tfa_basic_setup_form_submit($form, &$form_state) {
       tfa_basic_setup_save_data($account, $tfa_data);
       drupal_set_message('TFA setup complete');
       $form_state['redirect'] = 'user/' . $account->uid . '/tfa';
+      // Log/notify appropriately.
+      $params = array('account' => $account);
+      drupal_mail('tfa_basic', 'tfa_basic_tfa_enabled', $account->mail, user_preferred_language($account), $params);
+      watchdog('tfa', 'TFA enabled for user @name UID !uid', array(
+        '@name' => $account->name,
+        '!uid' => $account->uid,
+      ), WATCHDOG_NOTICE);
+
     }
     else {
       // Setup isn't complete so rebuild.
