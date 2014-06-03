@@ -13,6 +13,22 @@ function tfa_basic_permission() {
 }
 
 /**
+ * Implements hook_library().
+ */
+function tfa_basic_library() {
+  $items = array();
+  $items['qrcodejs'] = array(
+    'title' => 'QRCode.js',
+    'website' => 'https://github.com/davidshimjs/qrcodejs',
+    'version' => '1.0',
+    'js' => array(
+      drupal_get_path('module', 'tfa_basic') . '/includes/qrcodejs/qrcode.min.js' => array(),
+    ),
+  );
+  return $items;
+}
+
+/**
  * Implements hook_menu().
  */
 function tfa_basic_menu() {

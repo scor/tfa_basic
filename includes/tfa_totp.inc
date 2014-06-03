@@ -170,9 +170,24 @@ class TfaTotpSetup extends TfaTotp implements TfaSetupPluginInterface {
       '#description' => t('Enter this code into your two-factor authentication app or scan the QR code below.'),
     );
     // QR image of seed.
-    $form['qr_image'] = array(
-      '#markup' => '<img src="' . $this->getQrCodeUrl($this->seed) .'" alt="QR code for TFA setup">',
-    );
+    if (file_exists(drupal_get_path('module', 'tfa_basic') . '/includes/qrcodejs/qrcode.min.js')) {
+      $form['qr_image_wrapper']['qr_image'] = array(
+        '#markup' => '<div id="tfa-qrcode"></div>',
+      );
+      $qrdata = 'otpauth://totp/' . $this->accountName() . '?secret=' . $this->seed;
+      $form['qr_image_wrapper']['qr_image']['#attached']['library'][] = array('tfa_basic', 'qrcodejs');
+      $form['qr_image_wrapper']['qr_image']['#attached']['js'][] = array(
+        'data' => 'jQuery(document).ready(function () { new QRCode(document.getElementById("tfa-qrcode"), "' . $qrdata . '");});',
+        'type' => 'inline',
+        'scope' => 'footer',
+        'weight' => 5,
+      );
+    }
+    else {
+      $form['qr_image'] = array(
+        '#markup' => '<img src="' . $this->getQrCodeUrl($this->seed) .'" alt="QR code for TFA setup">',
+      );
+    }
     // Include code entry form.
     $form = $this->getForm($form, $form_state);
     // Alter code description.
@@ -217,7 +232,8 @@ class TfaTotpSetup extends TfaTotp implements TfaSetupPluginInterface {
    */
   protected function getQrCodeUrl($seed) {
     // Note, this URL is over https but does leak the seed and account
-    // email address to Google. @todo consider generating the QR image locally.
+    // email address to Google. See README.txt for local QR code generation
+    // using qrcode.js.
     return $this->ga->getQRCodeGoogleUrl($this->accountName(), $seed);
   }
 
