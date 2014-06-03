@@ -223,12 +223,12 @@ function tfa_basic_setup_save_data($account, $data) {
  * Implements hook_form_FORM_ID_alter().
  */
 function tfa_basic_form_tfa_admin_settings_alter(&$form, &$form_state, $form_id) {
-  global $base_url;
+  global $cookie_domain;
   // Add cookie domain field to TFA admin settings.
   $form['tfa_basic_cookie_domain'] = array(
     '#type' => 'textfield',
     '#title' => t('Cookie domain'),
-    '#default_value' => variable_get('tfa_basic_cookie_domain', '.' . $base_url),
+    '#default_value' => variable_get('tfa_basic_cookie_domain', $cookie_domain),
     '#description' => t('Domain to set for the trusted device TFA cookie.'),
     '#states' => array(
       'visible' => array(
