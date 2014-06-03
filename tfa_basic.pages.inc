@@ -147,30 +147,27 @@ function tfa_basic_setup_form($form, &$form_state, $account) {
   );
   if (empty($form_state['storage'])) {
 
-    $data = tfa_basic_get_tfa_data($account);
-
-    if (!empty($data) && $data['status']) {
-      $form['disable'] = array(
-        '#prefix' => '<p>',
-        '#suffix' => '</p>',
-        '#markup' => l(t('Disable two-factor verification'), 'user/' . $account->uid . '/tfa/disable'),
-      );
-    }
-    // Setup selection.
-    $form['app'] = array(
-      '#prefix' => '<div>',
-      '#suffix' => '</div>',
-      '#type' => 'submit',
-      '#value' => 'Setup application',
+    $current_pass_description = t('Enter your current password to continue with two-factor authentication setup.');
+    $form['current_pass'] = array(
+      '#type' => 'password',
+      '#title' => t('Current password'),
+      '#size' => 25,
+      '#required' => TRUE,
+      '#description' => $current_pass_description,
+      '#attributes' => array('autocomplete' => 'off'),
     );
-    $form['trust'] = array(
-      '#prefix' => '<div>',
-      '#suffix' => '</div>',
+    $form['submit'] = array(
       '#type' => 'submit',
-      '#value' => 'Mark browser trusted',
+      '#value' => t('Confirm'),
+    );
+    $form['cancel'] = array(
+      '#type' => 'submit',
+      '#value' => t('Cancel'),
+      '#limit_validation_errors' => array(),
+      '#submit' => array('tfa_basic_setup_form_submit'),
     );
   }
-  else {
+  elseif (isset($form_state['storage']['method'])) {
     $method = $form_state['storage']['method'];
     switch ($method) {
       case 'app':
@@ -199,6 +196,31 @@ function tfa_basic_setup_form($form, &$form_state, $account) {
       '#submit' => array('tfa_basic_setup_form_submit'),
     );
   }
+  elseif (isset($form_state['storage']['pass_confirmed'])) {
+
+    $data = tfa_basic_get_tfa_data($account);
+
+    if (!empty($data) && $data['status']) {
+      $form['disable'] = array(
+        '#prefix' => '<p>',
+        '#suffix' => '</p>',
+        '#markup' => l(t('Disable two-factor verification'), 'user/' . $account->uid . '/tfa/disable'),
+      );
+    }
+    // Setup selection.
+    $form['app'] = array(
+      '#prefix' => '<div>',
+      '#suffix' => '</div>',
+      '#type' => 'submit',
+      '#value' => t('Setup application'),
+    );
+    $form['trust'] = array(
+      '#prefix' => '<div>',
+      '#suffix' => '</div>',
+      '#type' => 'submit',
+      '#value' => t('Mark browser trusted'),
+    );
+  }
   return $form;
 
 }
@@ -207,24 +229,25 @@ function tfa_basic_setup_form($form, &$form_state, $account) {
  * Setup form validate.
  */
 function tfa_basic_setup_form_validate($form, &$form_state) {
-  if (empty($form_state['storage']['tfa_setup'])) {
-    return;
-  }
-  elseif ($form_state['values']['op'] === $form_state['values']['cancel']) {
-    return;
-  }
   $account = $form['account']['#value'];
-  // Check password. (from user.module user_validate_current_pass()).
-  require_once DRUPAL_ROOT . '/' . variable_get('password_inc', 'includes/password.inc');
-  $current_pass = user_check_password($form_state['values']['current_pass'], $account);
-  if (!$current_pass) {
-    form_set_error('current_pass', t("Incorrect password."));
+  if (isset($form_state['values']['current_pass'])) {
+    // Check password. (from user.module user_validate_current_pass()).
+    require_once DRUPAL_ROOT . '/' . variable_get('password_inc', 'includes/password.inc');
+    $current_pass = user_check_password($form_state['values']['current_pass'], $account);
+    if (!$current_pass) {
+      form_set_error('current_pass', t("Incorrect password."));
+    }
+    return;
   }
-
-  $tfaSetup = $form_state['storage']['tfa_setup'];
-  if (!$tfaSetup->validateForm($form, $form_state)) {
-    foreach ($tfaSetup->getErrorMessages() as $element => $message) {
-      form_set_error($element, $message);
+  elseif (isset($form_state['values']['cancel']) && $form_state['values']['op'] === $form_state['values']['cancel']) {
+    return;
+  }
+  elseif (!empty($form_state['storage']['tfa_setup'])) {
+    $tfaSetup = $form_state['storage']['tfa_setup'];
+    if (!$tfaSetup->validateForm($form, $form_state)) {
+      foreach ($tfaSetup->getErrorMessages() as $element => $message) {
+        form_set_error($element, $message);
+      }
     }
   }
 }
@@ -240,6 +263,10 @@ function tfa_basic_setup_form_submit($form, &$form_state) {
     drupal_set_message('TFA setup canceled');
     $form_state['redirect'] = 'user/' . $account->uid . '/tfa';
     return;
+  }
+  if (isset($form_state['values']['current_pass'])) {
+    $form_state['storage']['pass_confirmed'] = TRUE;
+    $form_state['rebuild'] = TRUE;
   }
 
   // A first step: create TfaSetup class for Application setup.
