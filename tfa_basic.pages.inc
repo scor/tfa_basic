@@ -214,12 +214,15 @@ function tfa_basic_setup_form($form, &$form_state, $account) {
       '#type' => 'submit',
       '#value' => t('Setup application'),
     );
-    $form['trust'] = array(
-      '#prefix' => '<div>',
-      '#suffix' => '</div>',
-      '#type' => 'submit',
-      '#value' => t('Mark browser trusted'),
-    );
+    $login_plugins = variable_get('tfa_login_plugins', array());
+    if (!empty($login_plugins) && in_array('tfa_basic_trusted_device', $login_plugins)) {
+      $form['trust'] = array(
+        '#prefix' => '<div>',
+        '#suffix' => '</div>',
+        '#type' => 'submit',
+        '#value' => t('Mark browser trusted'),
+      );
+    }
   }
   return $form;
 
