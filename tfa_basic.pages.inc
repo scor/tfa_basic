@@ -91,23 +91,35 @@ function tfa_basic_overview($account) {
 }
 
 function tfa_basic_disable_form($form, &$form_state, $account) {
+  global $user;
 
   $form_state['storage']['account'] = $account;
 
+  if ($account->uid != $user->uid && user_access('administer users')) {
+    $preamble_desc = t('Are you sure you want to disable TFA on account %name?', array('%name' => $account->name));
+    $notice_desc = t('TFA settings and data will be lost. %name can re-enable TFA again from their profile.', array('%name' => $account->name));
+    if (user_access('require tfa', $account)) {
+      drupal_set_message(t("This account is required to have TFA enabled per the 'require TFA' permission on one of their roles. Disabling TFA will remove their ability to log back into the site. If you continue, consider also removing the role so they can authenticate and setup TFA again."), 'warning');
+    }
+  }
+  else {
+    $preamble_desc = t('Are you sure you want to disable your two-factor authentication setup?');
+    $notice_desc = t("Your settings and data will be lost. You can re-enable two-factor authentication again from your profile.");
+    if (user_access('require tfa', $account)) {
+      drupal_set_message(t('Your account must have at least one two-factor authentication method enabled. Continuing will disable your ability to log back into this site.'), 'warning');
+      $notice_desc = t('Your settings and data will be lost and you will be unable to log back into the site. To regain access contact a site administrator.');
+    }
+  }
   $form['preamble'] = array(
     '#prefix' => '<p class="preamble">',
     '#suffix' => '</p>',
-    '#markup' => t('Are you sure you want to disable your two-factor authentication settings?'),
+    '#markup' => $preamble_desc,
   );
   $form['notice'] = array(
     '#prefix' => '<p class="preamble">',
     '#suffix' => '</p>',
-    '#markup' => t("Your settings and data will be lost. You can re-enable two-factor authentication again from your profile."),
+    '#markup' => $notice_desc,
   );
-  if (user_access('require tfa', $account)) {
-    drupal_set_message(t('Your account must have at least one two-factor authentication method enabled. Continuing will disable your ability to log back into this site.'), 'warning');
-    $form['notice']['#markup'] = t('Your settings and data will be lost and you will be unable to log back into the site. To regain access contact a site administrator.');
-  }
 
   $form['account']['current_pass'] = array(
     '#type' => 'password',
@@ -178,6 +190,8 @@ function tfa_basic_disable_form_submit($form, &$form_state) {
  * TFA setup form router.
  */
 function tfa_basic_setup_form($form, &$form_state, $account, $method = 'app_setup') {
+  global $user;
+
   $form['account'] = array(
     '#type' => 'value',
     '#value' => $account,
@@ -192,7 +206,13 @@ function tfa_basic_setup_form($form, &$form_state, $account, $method = 'app_setu
 
   if (empty($form_state['storage'])) {
 
-    $current_pass_description = t('Enter your current password to continue with two-factor authentication setup.');
+    // Allow administrators to change TFA settings for another account.
+    if ($account->uid != $user->uid && user_access('administer users')) {
+      $current_pass_description = t('Enter your current password to alter TFA settings for account %name.', array('%name' => $account->name));
+    }
+    else {
+      $current_pass_description = t('Enter your current password to continue with two-factor authentication setup.');
+    }
     $form['current_pass'] = array(
       '#type' => 'password',
       '#title' => t('Current password'),
@@ -270,8 +290,13 @@ function tfa_basic_setup_form($form, &$form_state, $account, $method = 'app_setu
  * Setup form validate.
  */
 function tfa_basic_setup_form_validate($form, &$form_state) {
+  global $user;
   $account = $form['account']['#value'];
   if (isset($form_state['values']['current_pass'])) {
+    // Allow administrators to change TFA settings for another account.
+    if ($account->uid != $user->uid && user_access('administer users')) {
+      $account = $user;
+    }
     // Check password. (from user.module user_validate_current_pass()).
     require_once DRUPAL_ROOT . '/' . variable_get('password_inc', 'includes/password.inc');
     $current_pass = user_check_password($form_state['values']['current_pass'], $account);
