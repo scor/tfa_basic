@@ -210,33 +210,69 @@ class TfaTrustedDeviceSetup extends TfaTrustedDevice implements TfaSetupPluginIn
    * @copydoc TfaSetupPluginInterface::getSetupForm()
    */
   public function getSetupForm(array $form, array &$form_state) {
+    $existing = $this->getTrustedDevices();
     $time = variable_get('tfa_basic_trust_cookie_expiration', 3600 * 24 * 30) / (3600 * 24);
     $form['info'] = array(
       '#type' => 'markup',
-      '#markup' => '<p>' . t('Saving this as a trusted browser will allow you to sign on from it without TFA for !time days. After !time days, you will be required to enter a TFA code to sign on and you can mark this browser as trusted again.', array('!time' => $time)) . '</p>',
+      '#markup' => '<p>' . t("Trusted browsers are a method for simplifying sign-on by avoiding TFA code entry for a set amount of time, !time days from marking a browser as trusted. After !time days, to sign in you'll need to enter a TFA code with your username and password during which you can again mark the browser as trusted.", array('!time' => $time)) . '</p>',
     );
-    // Optional field to name this device.
-    $form['name'] = array(
-      '#type' => 'textfield',
-      '#title' => t('Name this browser'),
-      '#maxlength' => 255,
-      '#description' => t('Name the browser on your device (e.g. "home firefox" or "office desktop windows").'),
-      '#default_value' => $this->getAgent(),
-    );
-    if (!empty($_SERVER['HTTP_USER_AGENT'])) {
-      $form['agent'] = array(
-        '#type' => 'markup',
-        '#markup' => '<p>' . t('Current user agent: %browser', array('%browser' => $_SERVER['HTTP_USER_AGENT'])) . '</p>',
+    // Present option to trust this browser if its not currently trusted.
+    if (isset($_COOKIE[$this->cookieName]) && ($device_id = $this->trustedDevice($_COOKIE[$this->cookieName])) !== FALSE) {
+      $current_trusted = $device_id;
+    }
+    else {
+      $current_trusted = FALSE;
+      $form['trust'] = array(
+        '#type' => 'checkbox',
+        '#title' => t('Trust this browser?'),
+        '#default_value' => empty($existing) ? 1 : 0,
+      );
+      // Optional field to name this device.
+      $form['name'] = array(
+        '#type' => 'textfield',
+        '#title' => t('Name this browser'),
+        '#maxlength' => 255,
+        '#description' => t('Optionally, name the browser on your device (e.g. "home firefox" or "office desktop windows"). Your current browser user agent is %browser', array('%browser' => $_SERVER['HTTP_USER_AGENT'])),
+        '#default_value' => $this->getAgent(),
+        '#states' => array(
+          'visible' => array(
+            ':input[name="trust"]' => array('checked' => TRUE),
+          ),
+        ),
       );
     }
-    $existing = $this->getTrustedDevices();
+
     if (!empty($existing)) {
-      $form['remove'] = array(
-        '#type' => 'checkbox',
-        '#title' => t('Remove existing'),
-        '#description' => t('Remove !count trusted browsers and mark only this browser as trusted.', array('!count' => count($existing))),
-        '#default_value' => 0,
+      $form['existing'] = array(
+        '#type' => 'fieldset',
+        '#title' => t('Existing browsers'),
+        '#description' => t('Leave checked to keep these browsers in your trusted sign-on list.'),
+        '#tree' => TRUE,
       );
+      foreach ($existing as $device) {
+        $vars = array(
+          '!set' => format_date($device['created']),
+          '!time' => format_date($device['last_used']),
+        );
+        if ($current_trusted == $device['id']) {
+          $name = '<strong>' . t('@name (current browser)', array('@name' => $device['name'])) . '</strong>';
+        }
+        else {
+          $name = check_plain($device['name']);
+        }
+        if (empty($device['last_used'])) {
+          $message = t('Marked trusted !set', $vars);
+        }
+        else {
+          $message = t('Marked trusted !set, last used for sign on !time', $vars);
+        }
+        $form['existing']['trusted_device_' . $device['id']] = array(
+          '#type' => 'checkbox',
+          '#title' => $name,
+          '#description' => $message,
+          '#default_value' => 1,
+        );
+      }
     }
     $form['actions']['save'] = array(
       '#type' => 'submit',
@@ -257,14 +293,22 @@ class TfaTrustedDeviceSetup extends TfaTrustedDevice implements TfaSetupPluginIn
    * @copydoc TfaSetupPluginInterface::submitSetupForm()
    */
   public function submitSetupForm(array $form, array &$form_state) {
-    if (!empty($form_state['values']['remove'])) {
-      $existing = $this->getTrustedDevices();
-      $this->deleteTrustedDevices();
-      watchdog('tfa', 'Removed !num TFA trusted browsers during new browser save', array('!num' => count($existing)), WATCHDOG_INFO);
+    if (isset($form_state['values']['existing'])) {
+      $count = 0;
+      foreach ($form_state['values']['existing'] as $element => $value) {
+        $id = str_replace('trusted_device_', '', $element);
+        if (!$value) {
+          $this->deleteTrusted($id);
+          $count++;
+        }
+      }
+      if ($count) {
+        watchdog('tfa', 'Removed !num TFA trusted browsers during trusted browser setup', array('!num' => $count), WATCHDOG_INFO);
+      }
     }
 
-    if (!empty($form_state['values']['trust_device']) && $form_state['values']['trust_device']) {
-      // Delete any currently trusted devices.
+    if (!empty($form_state['values']['trust']) && $form_state['values']['trust']) {
+      $name = '';
       if (!empty($form_state['values']['name'])) {
         $name = $form_state['values']['name'];
       }

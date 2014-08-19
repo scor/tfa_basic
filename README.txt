@@ -9,9 +9,12 @@ Plugins:
  A Time-based One Time Password plugin using PHP_Gansta\GoogleAuthenticator
  PHP library.
 
- * Trusted device
+ * Trusted Browsers
  A TFA login plugin allowing browsers to be marked "trusted" so that subsequent
  logins will not require TFA for a 30 day window.
+
+ * Recovery Codes
+ Pre-generated one-time-use codes.
 
 Variables:
 

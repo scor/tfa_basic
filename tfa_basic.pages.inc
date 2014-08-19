@@ -34,17 +34,14 @@ function tfa_basic_overview($account) {
     '#description' => t('Generate TFA codes for sign on from a mobile or desktop application.'),
   );
   $setup_text = !$enabled ? t('Set up application') : t('Reset application');
-  $app_url = url('user/' . $account->uid . '/tfa/app-setup', array('absolute' => TRUE));
   $output['app']['link'] = array(
     '#type' => 'markup',
-    '#markup' => l($setup_text, $app_url),
+    '#markup' => l($setup_text, 'user/' . $account->uid . '/security/tfa/app-setup'),
   );
 
   // Trusted browsers.
   $login_plugins = variable_get('tfa_login_plugins', array());
   if ($enabled && !empty($login_plugins) && in_array('tfa_basic_trusted_device', $login_plugins)) {
-    $trust_url = url('user/' . $account->uid . '/tfa/trusted-browsers', array('absolute' => TRUE));
-
     $trusted_device = new TfaTrustedDeviceSetup(array('uid' => $account->uid));
     $trusted_browsers = array();
     foreach ($trusted_device->getTrustedDevices() as $device) {
@@ -75,15 +72,39 @@ function tfa_basic_overview($account) {
     }
     $output['trust']['link'] = array(
       '#type' => 'markup',
-      '#markup' => l(t('Set trusted browsers'), $trust_url),
+      '#markup' => l(t('Set trusted browsers'), 'user/' . $account->uid . '/security/tfa/trusted-browsers'),
+    );
+  }
+
+  // Recovery codes.
+  if ($enabled && in_array('tfa_basic_recovery_code', variable_get('tfa_fallback_plugins', array()))) {
+    $recovery = new TfaBasicRecoveryCodeSetup(array('uid' => $account->uid));
+    $output['recovery'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('Recovery codes'),
+      '#description' => t('Pre-generated, one-time-use codes that allow sign on instead of the TFA application code.'),
+    );
+    $recovery_codes = $recovery->getCodes();
+    if (empty($recovery_codes)) {
+      $codes_text = t('Get recovery codes');
+    }
+    else {
+      $output['recovery']['list'] = array(
+        '#type' => 'markup',
+        '#markup' => '<p>' . l(t('View unused recovery codes'), 'user/' . $account->uid . '/security/tfa/recovery-codes-list') . '</p>',
+      );
+      $codes_text = t('Get new recovery codes');
+    }
+    $output['recovery']['link'] = array(
+      '#type' => 'markup',
+      '#markup' => l($codes_text, 'user/' . $account->uid . '/security/tfa/recovery-codes'),
     );
   }
 
   if ($enabled) {
-    $disable_url = url('user/' . $account->uid . '/tfa/disable', array('absolute' => TRUE));
     $output['disable'] = array(
       '#type' => 'markup',
-      '#markup' => '<p>' . l(t('Disable TFA'), $disable_url) . '</p>',
+      '#markup' => '<p>' . l(t('Disable TFA'), 'user/' . $account->uid . '/security/tfa/disable') . '</p>',
     );
   }
 
@@ -168,7 +189,7 @@ function tfa_basic_disable_form_submit($form, &$form_state) {
   $account = $form_state['storage']['account'];
   if ($form_state['values']['op'] === $form_state['values']['cancel']) {
     drupal_set_message(t('TFA disable canceled.'));
-    $form_state['redirect'] = 'user/' . $account->uid . '/tfa';
+    $form_state['redirect'] = 'user/' . $account->uid . '/security/tfa';
     return;
   }
   $params = array('account' => $account);
@@ -183,7 +204,7 @@ function tfa_basic_disable_form_submit($form, &$form_state) {
   drupal_mail('tfa_basic', 'disable', $account->mail, user_preferred_language($account), $params);
 
   drupal_set_message(t('TFA has been disabled.'));
-  $form_state['redirect'] = 'user/' . $account->uid . '/tfa';
+  $form_state['redirect'] = 'user/' . $account->uid . '/security/tfa';
 }
 
 /**
@@ -201,7 +222,7 @@ function tfa_basic_setup_form($form, &$form_state, $account, $method = 'app_setu
   // Do not continue if this isn't app setup and the app isn't already set.
   if (empty($tfa_data['status']) && $method != 'app_setup') {
     drupal_set_message(t('Set up TFA application before continuing with additional configurations.'), 'warning');
-    drupal_goto('/user/' . $account->uid . '/tfa');
+    drupal_goto('user/' . $account->uid . '/security/tfa');
   }
 
   if (empty($form_state['storage'])) {
@@ -234,13 +255,13 @@ function tfa_basic_setup_form($form, &$form_state, $account, $method = 'app_setu
   }
   else {
     // Support multi-step TFA plugins triggered in tfa_basic_setup_form_submit.
-    if (isset($form_state['storage']['next'])) {
-      $method = $form_state['storage']['next'];
+    if (isset($form_state['storage']['method'])) {
+      $method = $form_state['storage']['method'];
     }
     switch ($method) {
       case 'app_setup':
         drupal_set_title(t('TFA setup - Application'));
-        $form_state['storage']['method'][] = $method;
+        $form_state['storage']['methods'][] = $method;
         $tfa_setup = new TfaSetup(array('setup' => 'TfaTotpSetup'), array('uid' => $account->uid));
 
         if (!empty($tfa_data)) {
@@ -254,9 +275,17 @@ function tfa_basic_setup_form($form, &$form_state, $account, $method = 'app_setu
         break;
 
       case 'trust_device':
-        drupal_set_title(t('TFA setup - Trusted browser'));
-        $form_state['storage']['method'][] = $method;
+        drupal_set_title(t('TFA setup - Trusted browsers'));
+        $form_state['storage']['methods'][] = $method;
         $tfa_setup = new TfaSetup(array('setup' => 'TfaTrustedDeviceSetup'), array('uid' => $account->uid));
+        $form = $tfa_setup->getForm($form, $form_state);
+        $form_state['storage'][$method] = $tfa_setup;
+        break;
+
+      case 'recovery_codes':
+        drupal_set_title(t('TFA setup - Recovery codes'));
+        $form_state['storage']['methods'][] = $method;
+        $tfa_setup = new TfaSetup(array('setup' => 'TfaBasicRecoveryCodeSetup'), array('uid' => $account->uid));
         $form = $tfa_setup->getForm($form, $form_state);
         $form_state['storage'][$method] = $tfa_setup;
         break;
@@ -265,7 +294,7 @@ function tfa_basic_setup_form($form, &$form_state, $account, $method = 'app_setu
         break;
     }
     // Provide skip button for optional TFA plugins.
-    if (count($form_state['storage']['method']) > 1) {
+    if (count($form_state['storage']['methods']) > 1) {
       $form['actions']['skip'] = array(
         '#type' => 'submit',
         '#value' => t('Skip'),
@@ -273,6 +302,7 @@ function tfa_basic_setup_form($form, &$form_state, $account, $method = 'app_setu
         '#submit' => array('tfa_basic_setup_form_submit'),
       );
     }
+    $form_state['storage']['method'] = $method;
 
     $form['actions']['cancel'] = array(
       '#type' => 'submit',
@@ -308,8 +338,9 @@ function tfa_basic_setup_form_validate($form, &$form_state) {
   elseif (isset($form_state['values']['cancel']) && $form_state['values']['op'] === $form_state['values']['cancel']) {
     return;
   }
-  elseif (!empty($form_state['storage']['tfa_setup'])) {
-    $tfa_setup = $form_state['storage']['tfa_setup'];
+  elseif (!empty($form_state['storage']['method'])) {
+    $method = $form_state['storage']['method'];
+    $tfa_setup = $form_state['storage'][$method];
     if (!$tfa_setup->validateForm($form, $form_state)) {
       foreach ($tfa_setup->getErrorMessages() as $element => $message) {
         form_set_error($element, $message);
@@ -327,7 +358,7 @@ function tfa_basic_setup_form_submit($form, &$form_state) {
   // Cancel button.
   if (isset($form_state['values']['cancel']) && $form_state['values']['op'] === $form_state['values']['cancel']) {
     drupal_set_message('TFA setup canceled.');
-    $form_state['redirect'] = 'user/' . $account->uid . '/tfa';
+    $form_state['redirect'] = 'user/' . $account->uid . '/security/tfa';
     return;
   }
   // Password validation.
@@ -338,47 +369,58 @@ function tfa_basic_setup_form_submit($form, &$form_state) {
   }
   // Submitting a plugin form.
   elseif (!empty($form_state['storage']['method'])) {
-    $methods = $form_state['storage']['method'];
-
+    $method = $form_state['storage']['method'];
     // Trigger multi-step for optional config after app_setup.
-    if (count($methods) == 1 && $methods[0] == 'app_setup') {
+    if ($method == 'app_setup') {
       $form_state['rebuild'] = TRUE;
-      $form_state['storage']['next'] = 'trust_device';
+      $form_state['storage']['method'] = 'trust_device';
+      $form_state['storage']['values'][$method] = $form_state['values'];
       drupal_set_message(t('Mark this browser as trusted or skip to continue and finish TFA setup.'));
       return;
     }
     // Support skipping optional steps.
     elseif (isset($form_state['values']['skip']) && $form_state['values']['op'] === $form_state['values']['skip']) {
-      $skipped_method = array_pop($methods);
+      $skipped_method = array_pop($form_state['storage']['methods']);
       unset($form_state['storage'][$skipped_method]);
     }
+    // Trigger multi-step for optional recovery codes after trusted browser.
+    if ($method == 'trust_device' && in_array('app_setup', $form_state['storage']['methods'])) {
+      $form_state['rebuild'] = TRUE;
+      $form_state['storage']['method'] = 'recovery_codes';
+      $form_state['storage']['values'][$method] = $form_state['values'];
+      drupal_set_message(t('Save recovery codes or skip to complete TFA setup.'));
+      return;
+    }
+    // Form values are modified for each submitted plugin but need to be
+    // restored for possible form alters.
+    $values = $form_state['values'];
 
     $tfa_data = array(
       'method' => 'app',
     );
     // Run submit handler for each finished plugin.
-    foreach ($methods as $method) {
-      if (isset($form_state['storage'][$method])) {
-        $setup_class = $form_state['storage'][$method];
-        // Set trust_device form value for use by TfaTrustedDeviceSetup#submit
-        if ($method == 'trust_device') {
-          $form_state['values']['trust_device'] = TRUE;
-        }
-        if (!$setup_class->submitForm($form, $form_state)) {
-          drupal_set_message(t('There was an error during TFA setup. Your settings have not been saved.'), 'error');
-          $form_state['redirect'] = 'user/' . $account->uid . '/tfa';
-          return;
-        }
+    foreach ($form_state['storage']['methods'] as $method) {
+      $setup_class = $form_state['storage'][$method];
+
+      if (isset($form_state['storage']['values'][$method])) {
+        // Pass plugin-specific form values to plugin submit handlers.
+        $form_state['values'] = $form_state['storage']['values'][$method];
+      }
+      if (!$setup_class->submitForm($form, $form_state)) {
+        drupal_set_message(t('There was an error during TFA setup. Your settings have not been saved.'), 'error');
+        $form_state['redirect'] = 'user/' . $account->uid . '/security/tfa';
+        return;
       }
     }
+
     // Save TFA data.
     tfa_basic_setup_save_data($account, $tfa_data);
     // Setup complete, return to overview page.
     drupal_set_message(t('TFA setup complete.'));
-    $form_state['redirect'] = 'user/' . $account->uid . '/tfa';
+    $form_state['redirect'] = 'user/' . $account->uid . '/security/tfa';
 
     // Log and notify if app was set up.
-    if (in_array('app_setup', $methods)) {
+    if (in_array('app_setup', $form_state['storage']['methods'])) {
       $params = array('account' => $account);
       drupal_mail('tfa_basic', 'tfa_basic_tfa_enabled', $account->mail, user_preferred_language($account), $params);
       watchdog('tfa', 'TFA enabled for user @name UID !uid', array(
@@ -386,5 +428,23 @@ function tfa_basic_setup_form_submit($form, &$form_state) {
         '!uid' => $account->uid,
       ), WATCHDOG_INFO);
     }
+
+    // Restore form values.
+    $form_state['values'] = $values;
   }
+}
+
+/**
+ * Output unused recovery codes.
+ *
+ * @param stdClass $account
+ * @return string
+ */
+function tfa_basic_recovery_codes_list($account) {
+  $recovery = new TfaBasicRecoveryCodeSetup(array('uid' => $account->uid));
+  $codes = $recovery->getCodes();
+
+  $output = theme('item_list', array('items' => $codes));
+  $output .= l(t('Return to account TFA overview'), 'user/' . $account->uid . '/security/tfa');
+  return $output;
 }

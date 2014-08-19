@@ -34,8 +34,8 @@ function tfa_basic_library() {
 function tfa_basic_menu() {
   $items = array();
 
-  $items['user/%user/tfa'] = array(
-    'title' => 'TFA',
+  $items['user/%user/security/tfa'] = array(
+    'title' => 'Security',
     'page callback' => 'tfa_basic_overview',
     'page arguments' => array(1),
     'access callback' => 'tfa_basic_setup_access',
@@ -43,7 +43,7 @@ function tfa_basic_menu() {
     'type' => MENU_LOCAL_TASK,
     'file' => 'tfa_basic.pages.inc',
   );
-  $items['user/%user/tfa/disable'] = array(
+  $items['user/%user/security/tfa/disable'] = array(
     'title' => 'TFA disable',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('tfa_basic_disable_form', 1),
@@ -52,7 +52,7 @@ function tfa_basic_menu() {
     'type' => MENU_CALLBACK,
     'file' => 'tfa_basic.pages.inc',
   );
-  $items['user/%user/tfa/app-setup'] = array(
+  $items['user/%user/security/tfa/app-setup'] = array(
     'title' => 'TFA setup',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('tfa_basic_setup_form', 1, 'app_setup'),
@@ -61,10 +61,28 @@ function tfa_basic_menu() {
     'type' => MENU_CALLBACK,
     'file' => 'tfa_basic.pages.inc',
   );
-  $items['user/%user/tfa/trusted-browsers'] = array(
+  $items['user/%user/security/tfa/trusted-browsers'] = array(
     'title' => 'TFA setup',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('tfa_basic_setup_form', 1, 'trust_device'),
+    'access callback' => 'tfa_basic_setup_access',
+    'access arguments' => array(1, 'setup own tfa'),
+    'type' => MENU_CALLBACK,
+    'file' => 'tfa_basic.pages.inc',
+  );
+  $items['user/%user/security/tfa/recovery-codes'] = array(
+    'title' => 'TFA setup',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('tfa_basic_setup_form', 1, 'recovery_codes'),
+    'access callback' => 'tfa_basic_setup_access',
+    'access arguments' => array(1, 'setup own tfa'),
+    'type' => MENU_CALLBACK,
+    'file' => 'tfa_basic.pages.inc',
+  );
+  $items['user/%user/security/tfa/recovery-codes-list'] = array(
+    'title' => 'TFA - Unused recovery codes',
+    'page callback' => 'tfa_basic_recovery_codes_list',
+    'page arguments' => array(1),
     'access callback' => 'tfa_basic_setup_access',
     'access arguments' => array(1, 'setup own tfa'),
     'type' => MENU_CALLBACK,
@@ -116,6 +134,10 @@ function tfa_basic_tfa_api() {
       'class' => 'TfaTrustedDevice',
       'name' => 'Trusted Browsers',
     ),
+    'tfa_basic_recovery_code' => array(
+      'class' => 'TfaBasicRecoveryCode',
+      'name' => 'Recovery Codes',
+    ),
   );
 }
 
@@ -142,6 +164,28 @@ function tfa_basic_tfa_context_alter(&$context) {
   // If the user setup a fallback method add it.
   if (!empty($fallback_plugin)) {
     array_unshift($context['plugins']['fallback'], $api[$fallback_plugin]['class']);
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function tfa_basic_form_tfa_form_alter(&$form, &$form_state, $form_id) {
+  // Add validation handler for checking recovery codes on TOTP submission.
+  $form['#validate'][] = '_tfa_basic_form_validate';
+}
+
+/**
+ * Validation handler to check if recovery code is being submit for TOTP plugin.
+ *
+ * @param array $form
+ * @param array $form_state
+ */
+function _tfa_basic_form_validate($form, &$form_state) {
+  if (!empty($form_state['values']['code']) && isset($form['actions']['fallback'])) {
+    if (strlen($form_state['values']['code']) > 6 && in_array('tfa_basic_recovery_code', variable_get('tfa_fallback_plugins', array()))) {
+      drupal_set_message(t("Submit a recovery code by clicking the button \"Can't access your account?\""), 'warning');
+    }
   }
 }
 
@@ -205,7 +249,7 @@ function tfa_basic_setup_save_data($account, $data) {
   $record = array(
     'uid' => $account->uid,
     'saved' => REQUEST_TIME,
-    'status' =>  $status,
+    'status' => $status,
     'data' => json_encode($tfa_data),
   );
   if (!empty($existing)) {

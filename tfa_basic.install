@@ -105,5 +105,98 @@ function tfa_basic_schema() {
     ),
   );
 
+  $schema['tfa_recovery_code'] = array(
+    'fields' => array(
+      'id' => array(
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'uid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'code' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'Base 64 encoded encrypted code',
+      ),
+      'created' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'used' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('id'),
+    'indexes' => array(
+      'uid' => array('uid'),
+    ),
+  );
+
   return $schema;
+}
+
+/**
+ * Create new database table {tfa_recovery_code}.
+ */
+function tfa_basic_update_7001() {
+  $schema['tfa_recovery_code'] = array(
+    'fields' => array(
+      'id' => array(
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'uid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'code' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'Base 64 encoded encrypted code',
+      ),
+      'created' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'used' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('id'),
+    'indexes' => array(
+      'uid' => array('uid'),
+    ),
+  );
+  db_create_table('tfa_recovery_code', $schema['tfa_recovery_code']);
+}
+
+/**
+ * Implement hook_uninstall().
+ */
+function tfa_basic_uninstall() {
+  // Delete TFA Basic variables.
+  variable_del('tfa_basic_secret_key');
+  variable_del('tfa_basic_time_skew');
+  variable_del('tfa_recovery_codes_amount');
+  variable_del('tfa_basic_trust_cookie_expiration');
+  variable_del('tfa_basic_name_prefix');
+  variable_del('tfa_basic_cookie_name');
 }

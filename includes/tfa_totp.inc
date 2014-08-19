@@ -44,7 +44,7 @@ class TfaTotp extends TfaBasePlugin implements TfaValidationPluginInterface {
   public function getForm(array $form, array &$form_state) {
     $form['code'] = array(
       '#type' => 'textfield',
-      '#title' => t('Verification code'),
+      '#title' => t('Application verification code'),
       '#description' => t('Verification code is application generated and !length digits long.', array('!length' => $this->codeLength)),
       '#required' => TRUE,
       '#attributes' => array('autocomplete' => 'off'),
@@ -63,7 +63,7 @@ class TfaTotp extends TfaBasePlugin implements TfaValidationPluginInterface {
    */
   public function validateForm(array $form, array &$form_state) {
     if (!$this->validate($form_state['values']['code'])) {
-      $this->errorMessages['code'] = t('Invalid code. Please try again.');
+      $this->errorMessages['code'] = t('Invalid application code. Please try again.');
       return FALSE;
     }
     else {
@@ -149,7 +149,7 @@ class TfaTotpSetup extends TfaTotp implements TfaSetupPluginInterface {
     );
     $form['apps'] = array(
       '#type' => 'markup',
-      '#markup' => theme('item_list', array('items' => $items, 'title' => t('Install authentication code application on your smartphone or tablet device:'))),
+      '#markup' => theme('item_list', array('items' => $items, 'title' => t('Install authentication code application on your mobile or desktop device:'))),
     );
     $form['info'] = array(
       '#type' => 'markup',
@@ -192,7 +192,7 @@ class TfaTotpSetup extends TfaTotp implements TfaSetupPluginInterface {
    */
   public function validateSetupForm(array $form, array &$form_state) {
     if (!$this->validate($form_state['values']['code'])) {
-      $this->errorMessages['code'] = t('Invalid code. Please try again.');
+      $this->errorMessages['code'] = t('Invalid application code. Please try again.');
       return FALSE;
     }
     else {

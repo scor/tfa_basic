@@ -4,6 +4,9 @@ core = 7.x
 
 dependencies[] = tfa
 
+files[] = tests/tfa_basic.test
+
 files[] = includes/tfa_totp.inc
 files[] = includes/tfa_trusted_device.inc
+files[] = includes/tfa_recovery.inc
 files[] = includes/googleauthenticator/GoogleAuthenticator.php
