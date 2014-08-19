@@ -4,13 +4,13 @@
  * @param $account
  * @return string
  */
-function tfa_basic_overview($account) {
+function tfa_basic_overview($form, &$form_state, $account) {
 
   $output['info'] = array(
     '#type' => 'markup',
     '#markup' => '<p>' . t('Two-factor authentication (TFA) provides additional security for your account. With TFA enabled, you sign on to the site with a uniquely generated code in addition to your username and password.') . '</p>',
   );
-
+  $form_state['storage']['account'] = $account;
   $data = tfa_basic_get_tfa_data($account);
   $enabled = isset($data['status']) && $data['status'] ? TRUE : FALSE;
 
@@ -108,7 +108,7 @@ function tfa_basic_overview($account) {
     );
   }
 
-  return drupal_render($output);
+  return $output;
 }
 
 function tfa_basic_disable_form($form, &$form_state, $account) {
@@ -294,7 +294,7 @@ function tfa_basic_setup_form($form, &$form_state, $account, $method = 'app_setu
         break;
     }
     // Provide skip button for optional TFA plugins.
-    if (count($form_state['storage']['methods']) > 1) {
+    if (isset($form_state['storage']['methods']) && count($form_state['storage']['methods']) > 1) {
       $form['actions']['skip'] = array(
         '#type' => 'submit',
         '#value' => t('Skip'),
