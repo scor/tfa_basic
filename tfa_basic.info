@@ -1,5 +1,5 @@
 name = "TFA Basic Plugins"
-description = "TFA plugin for Time-based One Time Passwords and Trusted Devices"
+description = "TFA plugins for Time-based One Time Passwords, Trusted Browsers, Recovery Codes, and Twilio SMS"
 core = 7.x
 
 dependencies[] = tfa
@@ -9,4 +9,7 @@ files[] = tests/tfa_basic.test
 files[] = includes/tfa_totp.inc
 files[] = includes/tfa_trusted_device.inc
 files[] = includes/tfa_recovery.inc
+files[] = includes/tfa_sms.inc
+
 files[] = includes/googleauthenticator/GoogleAuthenticator.php
+files[] = includes/twilio-php/Services/Twilio.php

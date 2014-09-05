@@ -199,4 +199,6 @@ function tfa_basic_uninstall() {
   variable_del('tfa_basic_trust_cookie_expiration');
   variable_del('tfa_basic_name_prefix');
   variable_del('tfa_basic_cookie_name');
+  variable_del('tfa_basic_twilio_account_sid');
+  variable_del('tfa_basic_twilio_account_token');
 }

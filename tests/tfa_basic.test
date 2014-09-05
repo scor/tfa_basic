@@ -109,10 +109,6 @@ class TfaBasicTestCase extends DrupalWebTestCase {
     );
     $this->drupalPost(NULL, $edit, 'Verify');
 
-    // Do not set trusted browser.
-    $this->assertText($this->uiStrings('set-trust-skip'));
-    $this->drupalPost(NULL, array(), 'Skip');
-
     // Setup recovery codes.
     $this->assertText($this->uiStrings('set-recovery-codes'));
 
@@ -193,7 +189,7 @@ class TfaBasicTestCase extends DrupalWebTestCase {
       case 'setup-app':
         return 'Set up application';
       case 'password-request':
-        return 'Enter your current password to continue with two-factor authentication setup.';
+        return 'Enter your current password to continue.';
       case 'pass-error':
         return 'Incorrect password';
       case 'app-step1':

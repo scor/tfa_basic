@@ -153,7 +153,7 @@ class TfaBasicRecoveryCodeSetup extends TfaBasicRecoveryCode implements TfaSetup
     $form['codes'] = array(
       '#type' => 'item',
       '#title' => t('Your recovery codes'),
-      '#description' => t('Print, save, or write down these codes for use in case your are without your application and need to sign in.'),
+      '#description' => t('Print, save, or write down these codes for use in case you are without your application and need to sign in.'),
       '#markup' => theme('item_list', array('items' => $this->codes)),
       '#attributes' => array('class' => array('recovery-codes')),
     );
@@ -179,6 +179,19 @@ class TfaBasicRecoveryCodeSetup extends TfaBasicRecoveryCode implements TfaSetup
   public function submitSetupForm(array $form, array &$form_state) {
     $this->storeCodes($this->codes);
     return TRUE;
+  }
+
+  /**
+   * Delete existing codes.
+   *
+   * @return int
+   */
+  public function deleteCodes() {
+    // Delete any existing codes.
+    $num_deleted = db_delete('tfa_recovery_code')
+      ->condition('uid', $this->context['uid'])
+      ->execute();
+    return $num_deleted;
   }
 
   /**
@@ -227,10 +240,7 @@ class TfaBasicRecoveryCodeSetup extends TfaBasicRecoveryCode implements TfaSetup
    * @param array $codes
    */
   protected function storeCodes($codes) {
-    // Delete any existing codes.
-    $num_deleted = db_delete('tfa_recovery_code')
-      ->condition('uid', $this->context['uid'])
-      ->execute();
+    $num_deleted = $this->deleteCodes();
     // Encrypt code for storage.
     foreach ($codes as $code) {
       $encrypted = $this->encrypt($code);
