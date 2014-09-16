@@ -158,6 +158,10 @@ function tfa_basic_tfa_api() {
  * Alters tfa_context array to set plugins from user settings.
  */
 function tfa_basic_tfa_context_alter(&$context) {
+  // $context can be empty during beginning of TFA process.
+  if (empty($context)) {
+    return;
+  }
   $api = module_invoke_all('tfa_api');
 
   $account = user_load($context['uid']);
@@ -165,20 +169,16 @@ function tfa_basic_tfa_context_alter(&$context) {
   if (empty($tfa_data['status']) || empty($tfa_data['data']['primary'])) {
     return;
   }
-  // Replace validate plugin with users.
-  if ($tfa_data['data']['primary'] === 'app') {
-    $context['plugins']['validate'] = $api['tfa_basic_totp']['class'];
-  }
-  // Add SMS plugin if enabled and mobile number is available.
-  if (in_array('tfa_basic_sms', variable_get('tfa_fallback_plugins', array())) && !empty($tfa_data['data']['sms'])) {
-    $number = tfa_basic_get_mobile_number($account);
-    if ($number !== FALSE) {
-      $context['plugins']['fallback'][] = $api['tfa_basic_sms']['class'];
+  // Remove SMS plugin if enabled and mobile number is not available.
+  $number = tfa_basic_get_mobile_number($account);
+  if (in_array('tfa_basic_sms', variable_get('tfa_fallback_plugins', array())) && (empty($tfa_data['data']['sms']) || !$number)) {
+    $fallback_plugins = array();
+    foreach ($context['plugins']['fallback'] as $plugin) {
+      if ($plugin !== $api['tfa_basic_sms']['class']) {
+        $fallback_plugins[] = $plugin;
+      }
     }
-  }
-  else {
-    // Limit to recovery code plugin.
-    $context['plugins']['fallback'] = array($api['tfa_basic_recovery_code']['class']);
+    $context['plugins']['fallback'] = $fallback_plugins;
   }
 }
 
@@ -196,7 +196,7 @@ function tfa_basic_get_mobile_number($account) {
   $number = FALSE;
   // Note, set tfa_basic_phone_field to FALSE to avoid using account field as
   // storage.
-  if ($phone_field !== FALSE) {
+  if (!empty($phone_field)) {
     if (!empty($account->{$phone_field}[LANGUAGE_NONE][0]['value'])) {
       $number = $account->{$phone_field}[LANGUAGE_NONE][0]['value'];
     }
@@ -219,8 +219,7 @@ function tfa_basic_get_mobile_number($account) {
 function tfa_basic_set_mobile_number($account, $number) {
   $phone_field = variable_get('tfa_basic_phone_field', '');
   if ($phone_field !== FALSE) {
-    if (isset($account->{$phone_field}[LANGUAGE_NONE][0]['value'])) {
-      $account->{$phone_field}[LANGUAGE_NONE][0]['value'] = $number;
+    if (isset($account->{$phone_field})) {
       $edit = array(
         $phone_field => array(LANGUAGE_NONE => array(0 => array('value' => $number))),
       );
@@ -372,7 +371,7 @@ function tfa_basic_valid_number($number) {
 }
 
 /**
- * Formate a mobile number.
+ * Format a mobile number.
  *
  * @param string $number
  *   Phone number.
@@ -381,6 +380,8 @@ function tfa_basic_valid_number($number) {
  *   Formatted number.
  */
 function tfa_basic_format_number($number) {
+  $number = str_replace(array('-', ' ', '(', ')'), '', $number);
+  $formatted = $number;
   if (ctype_digit($number) && strlen($number) == 11) {
     $formatted = 'x-xxx-xxx-' . substr($number, 7);
   }

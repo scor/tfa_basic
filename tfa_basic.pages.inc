@@ -351,7 +351,7 @@ function tfa_basic_setup_form($form, &$form_state, $account, $method = 'app_setu
             '#default_value' => $default_number ?: '',
           );
           $phone_field = variable_get('tfa_basic_phone_field', '');
-          if ($phone_field !== FALSE) {
+          if (!empty($phone_field)) {
             // Report that this is an account field.
             $field = field_info_instance('user', $phone_field, 'user');
             $form['sms_number']['#description'] .= ' ' . t('This number is stored on your account under field %label.', array('%label' => $field['label']));
@@ -400,17 +400,16 @@ function tfa_basic_setup_form($form, &$form_state, $account, $method = 'app_setu
         '#submit' => array('tfa_basic_setup_form_submit'),
       );
     }
+    // Provide cancel button on first step or single steps.
     else {
-
+      $form['actions']['cancel'] = array(
+        '#type' => 'submit',
+        '#value' => t('Cancel'),
+        '#limit_validation_errors' => array(),
+        '#submit' => array('tfa_basic_setup_form_submit'),
+      );
     }
     $form_state['storage']['method'] = $method;
-
-    $form['actions']['cancel'] = array(
-      '#type' => 'submit',
-      '#value' => t('Cancel'),
-      '#limit_validation_errors' => array(),
-      '#submit' => array('tfa_basic_setup_form_submit'),
-    );
   }
 
   return $form;
@@ -513,62 +512,15 @@ function tfa_basic_setup_form_submit($form, &$form_state) {
   // Submitting a plugin form.
   elseif (!empty($form_state['storage']['method'])) {
     $method = $form_state['storage']['method'];
-    // Hold on to submitted form values.
-    $form_state['storage']['values'][$method] = $form_state['values'];
+
     // Support skipping optional steps.
     if (isset($form_state['values']['skip']) && $form_state['values']['op'] === $form_state['values']['skip']) {
       $skipped_method = array_pop($form_state['storage']['methods']);
       unset($form_state['storage'][$skipped_method]);
     }
-
-    // Set up additional plugins if the process began with application setup.
-    if (in_array('app_setup', $form_state['storage']['methods'])) {
-      // Trigger multi-step for optional config after app_setup.
-      switch ($method) {
-        case 'app_setup':
-          drupal_set_message(t('Application code verified.'));
-          _tfa_basic_app_setup_next_step($form, $form_state);
-          break;
-
-        case 'sms_setup':
-          _tfa_basic_sms_setup_next_step($form, $form_state);
-          break;
-
-        case 'trust_device':
-          _tfa_basic_trusted_device_next_step($form, $form_state);
-          break;
-
-        case 'recovery_codes':
-          // Do nothing, recovery codes is final step.
-          break;
-      }
-    }
-    // Return if multi-step.
-    if (isset($form_state['rebuild']) && $form_state['rebuild']) {
-      return;
-    }
-    // Form values are modified for each submitted plugin but need to be
-    // restored for possible form alters.
-    $values = $form_state['values'];
-
-    $tfa_data = array(
-      'method' => 'app',
-    );
-    if (isset($form_state['storage']['sms_number']) && in_array('sms_setup', $form_state['storage']['methods'])) {
-      $tfa_data['sms'] = TRUE;
-      // Update mobile number if different than stored.
-      if ($form_state['storage']['sms_number'] !== tfa_basic_get_mobile_number($account)) {
-        tfa_basic_set_mobile_number($account, $form_state['storage']['sms_number']);
-      }
-    }
-    // Run submit handler for each finished plugin.
-    foreach ($form_state['storage']['methods'] as $method) {
+    // Plugin form submit.
+    elseif (!empty($form_state['storage'][$method])) {
       $setup_class = $form_state['storage'][$method];
-
-      if (isset($form_state['storage']['values'][$method])) {
-        // Pass plugin-specific form values to plugin submit handlers.
-        $form_state['values'] = $form_state['storage']['values'][$method];
-      }
       if (!$setup_class->submitForm($form, $form_state)) {
         drupal_set_message(t('There was an error during TFA setup. Your settings have not been saved.'), 'error');
         $form_state['redirect'] = 'user/' . $account->uid . '/security/tfa';
@@ -576,8 +528,33 @@ function tfa_basic_setup_form_submit($form, &$form_state) {
       }
     }
 
-    // Save TFA data.
-    tfa_basic_setup_save_data($account, $tfa_data);
+    // Save user TFA settings for relevant plugins.
+    switch ($method) {
+      case 'app_setup':
+        drupal_set_message(t('Application code verified.'));
+        tfa_basic_setup_save_data($account, array('method' => 'app'));
+        break;
+
+      case 'sms_setup':
+        if (isset($form_state['storage']['sms_number']) && in_array('sms_setup', $form_state['storage']['methods'])) {
+          // Update mobile number if different than stored.
+          if ($form_state['storage']['sms_number'] !== tfa_basic_get_mobile_number($account)) {
+            tfa_basic_set_mobile_number($account, $form_state['storage']['sms_number']);
+          }
+          tfa_basic_setup_save_data($account, array('sms' => TRUE));
+        }
+        break;
+    }
+    // Trigger multi-step plugins if this process began with application setup.
+    if (in_array('app_setup', $form_state['storage']['methods']) && function_exists('_tfa_basic_' . $method . '_next_step')) {
+      $function = '_tfa_basic_' . $method . '_next_step';
+      $function($form_state, $form_state);
+    }
+    // Return if multi-step.
+    if (isset($form_state['rebuild']) && $form_state['rebuild']) {
+      return;
+    }
+
     // Setup complete, return to overview page.
     drupal_set_message(t('TFA setup complete.'));
     $form_state['redirect'] = 'user/' . $account->uid . '/security/tfa';
@@ -591,9 +568,6 @@ function tfa_basic_setup_form_submit($form, &$form_state) {
         '!uid' => $account->uid,
       ), WATCHDOG_INFO);
     }
-
-    // Restore form values.
-    $form_state['values'] = $values;
   }
 }
 
@@ -626,14 +600,14 @@ function _tfa_basic_sms_setup_next_step(&$form, &$form_state) {
   }
   else {
     // Or whatever would be after trusted browser step.
-    _tfa_basic_trusted_device_next_step($form, $form_state);
+    _tfa_basic_trust_device_next_step($form, $form_state);
   }
 }
 
 /**
  * Set step after trusted browsers.
  */
-function _tfa_basic_trusted_device_next_step(&$form, &$form_state) {
+function _tfa_basic_trust_device_next_step(&$form, &$form_state) {
   // Final step is recovery codes if enabled.
   if (in_array('tfa_basic_recovery_code', variable_get('tfa_fallback_plugins', array()))) {
     $form_state['rebuild'] = TRUE;

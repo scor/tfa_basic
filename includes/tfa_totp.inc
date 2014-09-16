@@ -182,6 +182,7 @@ class TfaTotpSetup extends TfaTotp implements TfaSetupPluginInterface {
     }
     // Include code entry form.
     $form = $this->getForm($form, $form_state);
+    $form['actions']['login']['#value'] = t('Verify and save');
     // Alter code description.
     $form['code']['#description'] = t('A verification code will be generated after you scan the above QR code or manually enter the setup code. The verification code is six digits long.');
     return $form;

@@ -100,14 +100,14 @@ class TfaBasicTestCase extends DrupalWebTestCase {
     $edit = array(
       'code' => $this->randomName(),
     );
-    $this->drupalPost(NULL, $edit, 'Verify');
+    $this->drupalPost(NULL, $edit, 'Verify and save');
     $this->assertText($this->uiStrings('invalid-code-retry'));
 
     // Submit valid code.
     $edit = array(
       'code' => $this->ga->getCode($this->seed),
     );
-    $this->drupalPost(NULL, $edit, 'Verify');
+    $this->drupalPost(NULL, $edit, 'Verify and save');
 
     // Setup recovery codes.
     $this->assertText($this->uiStrings('set-recovery-codes'));

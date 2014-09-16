@@ -182,7 +182,7 @@ class TfaBasicSmsSetup extends TfaBasicSms implements TfaSetupPluginInterface {
     );
     $form['actions']['verify'] = array(
       '#type' => 'submit',
-      '#value' => t('Verify'),
+      '#value' => t('Verify and save'),
     );
 
     return $form;

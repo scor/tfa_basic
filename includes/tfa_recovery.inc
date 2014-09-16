@@ -65,7 +65,7 @@ class TfaBasicRecoveryCode extends TfaBasePlugin implements TfaValidationPluginI
         ->condition('uid', $this->context['uid'])
         ->execute();
       if ($num) {
-        watchdog('tfa', 'Used TFA recovery code !id by user !uid', array('!id' => $this->usedCode, '!uid' => $this->context['uid']), WATCHDOG_NOTICE);
+        watchdog('tfa_basic', 'Used TFA recovery code !id by user !uid', array('!id' => $this->usedCode, '!uid' => $this->context['uid']), WATCHDOG_NOTICE);
       }
     }
   }
@@ -257,6 +257,6 @@ class TfaBasicRecoveryCodeSetup extends TfaBasicRecoveryCode implements TfaSetup
     if ($num_deleted) {
       $message .= ' and deleted !del old codes';
     }
-    watchdog('tfa', $message, array('!uid' => $this->context['uid'], '!del' => $num_deleted), WATCHDOG_INFO);
+    watchdog('tfa_basic', $message, array('!uid' => $this->context['uid'], '!del' => $num_deleted), WATCHDOG_INFO);
   }
 }
