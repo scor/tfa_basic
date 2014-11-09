@@ -211,11 +211,12 @@ class TfaBasicRecoveryCodeSetup extends TfaBasicRecoveryCode implements TfaSetup
    * @return string
    */
   protected function generateBlock($length) {
-    $string = '';
-    for ($p = 0; $p < $length; $p++) {
-      $string .= mt_rand(0, 9);
-    }
-    return $string;
+    $block = '';
+    do {
+      $block .= ord(drupal_random_bytes(1));
+    } while (strlen($block) <= $length);
+
+    return substr($block, 0, $length);
   }
 
   /**
