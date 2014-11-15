@@ -8,7 +8,7 @@ function tfa_basic_overview($form, &$form_state, $account) {
 
   $output['info'] = array(
     '#type' => 'markup',
-    '#markup' => '<p>' . t('Two-factor authentication (TFA) provides additional security for your account. With TFA enabled, you sign on to the site with a uniquely generated code in addition to your username and password.') . '</p>',
+    '#markup' => '<p>' . t('Two-factor authentication (TFA) provides additional security for your account. With TFA enabled, you log in to the site with a uniquely generated code in addition to your username and password.') . '</p>',
   );
   $form_state['storage']['account'] = $account;
   $user_tfa = tfa_basic_get_tfa_data($account);
@@ -31,7 +31,7 @@ function tfa_basic_overview($form, &$form_state, $account) {
   $output['app'] = array(
     '#type' => 'fieldset',
     '#title' => t('TFA application'),
-    '#description' => t('Generate TFA codes for sign on from a mobile or desktop application.'),
+    '#description' => t('Generate TFA codes for log in from a mobile or desktop application.'),
   );
   $setup_text = !$enabled ? t('Set up application') : t('Reset application');
   $output['app']['link'] = array(
@@ -45,7 +45,7 @@ function tfa_basic_overview($form, &$form_state, $account) {
     $output['sms'] = array(
       '#type' => 'fieldset',
       '#title' => t('SMS fallback'),
-      '#description' => t('Receive TFA code via SMS if you are are unable to use mobile application during sign in.'),
+      '#description' => t('Receive TFA code via SMS if you are are unable to use mobile application during log in.'),
     );
     $mobile_number = tfa_basic_get_mobile_number($account);
     if (!empty($user_tfa['data']['sms']) && $mobile_number !== FALSE) {
@@ -88,7 +88,7 @@ function tfa_basic_overview($form, &$form_state, $account) {
     $output['trust'] = array(
       '#type' => 'fieldset',
       '#title' => t('Trusted browsers'),
-      '#description' => t('Browsers that will not require TFA during sign on for !time days from first set.', array('!time' => $time)),
+      '#description' => t('Browsers that will not require TFA during log in for !time days from first set.', array('!time' => $time)),
     );
     if (!empty($trusted_browsers)) {
       $output['trust']['list'] = array(
@@ -108,7 +108,7 @@ function tfa_basic_overview($form, &$form_state, $account) {
     $output['recovery'] = array(
       '#type' => 'fieldset',
       '#title' => t('Recovery codes'),
-      '#description' => t('Pre-generated, one-time-use codes that allow sign on instead of the TFA application code.'),
+      '#description' => t('Pre-generated, one-time-use codes that allow log in instead of the TFA application code.'),
     );
     $recovery_codes = $recovery->getCodes();
     if (empty($recovery_codes)) {
@@ -580,7 +580,7 @@ function _tfa_basic_app_setup_next_step(&$form, &$form_state) {
   if ($phone_field !== '' && in_array('tfa_basic_sms', variable_get('tfa_fallback_plugins', array()))) {
     $form_state['rebuild'] = TRUE;
     $form_state['storage']['method'] = 'sms_setup';
-    drupal_set_message(t('Provide a mobile phone number that can receive SMS codes in case you are without your phone or application and need to sign in.'));
+    drupal_set_message(t('Provide a mobile phone number that can receive SMS codes in case you are without your phone or application and need to log in.'));
   }
   else {
     // Or whatever would be after SMS step.

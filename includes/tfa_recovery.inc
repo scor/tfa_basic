@@ -36,7 +36,7 @@ class TfaBasicRecoveryCode extends TfaBasePlugin implements TfaValidationPluginI
       '#type' => 'textfield',
       '#title' => t('Enter one of your recovery codes'),
       '#required' => TRUE,
-      '#description' => t('These recovery codes were generated when you first set up TFA.'),
+      '#description' => t('Recovery codes were generated when you first set up TFA. Format: XXX XX XXX'),
       '#attributes' => array('autocomplete' => 'off'),
     );
     $form['actions']['login'] = array(
@@ -153,7 +153,7 @@ class TfaBasicRecoveryCodeSetup extends TfaBasicRecoveryCode implements TfaSetup
     $form['codes'] = array(
       '#type' => 'item',
       '#title' => t('Your recovery codes'),
-      '#description' => t('Print, save, or write down these codes for use in case you are without your application and need to sign in.'),
+      '#description' => t('Print, save, or write down these codes for use in case you are without your application and need to log in.'),
       '#markup' => theme('item_list', array('items' => $this->codes)),
       '#attributes' => array('class' => array('recovery-codes')),
     );

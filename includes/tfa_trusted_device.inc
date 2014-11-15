@@ -214,7 +214,7 @@ class TfaTrustedDeviceSetup extends TfaTrustedDevice implements TfaSetupPluginIn
     $time = variable_get('tfa_basic_trust_cookie_expiration', 3600 * 24 * 30) / (3600 * 24);
     $form['info'] = array(
       '#type' => 'markup',
-      '#markup' => '<p>' . t("Trusted browsers are a method for simplifying sign-on by avoiding TFA code entry for a set amount of time, !time days from marking a browser as trusted. After !time days, to sign in you'll need to enter a TFA code with your username and password during which you can again mark the browser as trusted.", array('!time' => $time)) . '</p>',
+      '#markup' => '<p>' . t("Trusted browsers are a method for simplifying log in by avoiding TFA code entry for a set amount of time, !time days from marking a browser as trusted. After !time days, to log in you'll need to enter a TFA code with your username and password during which you can again mark the browser as trusted.", array('!time' => $time)) . '</p>',
     );
     // Present option to trust this browser if its not currently trusted.
     if (isset($_COOKIE[$this->cookieName]) && ($device_id = $this->trustedDevice($_COOKIE[$this->cookieName])) !== FALSE) {
@@ -246,7 +246,7 @@ class TfaTrustedDeviceSetup extends TfaTrustedDevice implements TfaSetupPluginIn
       $form['existing'] = array(
         '#type' => 'fieldset',
         '#title' => t('Existing browsers'),
-        '#description' => t('Leave checked to keep these browsers in your trusted sign-on list.'),
+        '#description' => t('Leave checked to keep these browsers in your trusted log in list.'),
         '#tree' => TRUE,
       );
       foreach ($existing as $device) {
@@ -264,7 +264,7 @@ class TfaTrustedDeviceSetup extends TfaTrustedDevice implements TfaSetupPluginIn
           $message = t('Marked trusted !set', $vars);
         }
         else {
-          $message = t('Marked trusted !set, last used for sign on !time', $vars);
+          $message = t('Marked trusted !set, last used for log in !time', $vars);
         }
         $form['existing']['trusted_device_' . $device['id']] = array(
           '#type' => 'checkbox',
