@@ -485,6 +485,17 @@ function tfa_basic_form_tfa_admin_settings_alter(&$form, &$form_state, $form_id)
         ),
       ),
     );
+    $form['tfa_basic_twilio_account_number'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Twilio account number'),
+      '#default_value' => variable_get('tfa_basic_twilio_account_number', ''),
+      '#description' => t('Private Twilio account number from twilio.com.'),
+      '#states' => array(
+        'visible' => array(
+          ':input[name="tfa_fallback[tfa_basic_sms][enable]"]' => array('checked' => TRUE),
+        ),
+      ),
+    );
 
     // Mobile phone storage field. Set variable to FALSE to ignore.
     $phone_field = variable_get('tfa_basic_phone_field', '');
@@ -548,6 +559,9 @@ function tfa_basic_form_validate($form, &$form_state) {
     if (empty($values['tfa_basic_twilio_account_token'])) {
       form_set_error('tfa_basic_twilio_account_token', t('Account token is required if Twilio SMS plugin is enabled.'));
     }
+    if (empty($values['tfa_basic_twilio_account_number'])) {
+      form_set_error('tfa_basic_twilio_account_number', t('Account number is required if Twilio SMS plugin is enabled.'));
+    }
     $phone_field = variable_get('tfa_basic_phone_field', '');
     if ($phone_field !== FALSE && empty($values['tfa_basic_phone_field'])) {
       form_set_error('', t('An account field for mobile number storage is required to use the Twilio SMS plugin. Consult TFA Basic README.txt for more info.'));
@@ -567,6 +581,9 @@ function tfa_basic_form_submit($form, &$form_state) {
   }
   if (!empty($form_state['values']['tfa_basic_twilio_account_token'])) {
     variable_set('tfa_basic_twilio_account_token', $form_state['values']['tfa_basic_twilio_account_token']);
+  }
+  if (!empty($form_state['values']['tfa_basic_twilio_account_number'])) {
+    variable_set('tfa_basic_twilio_account_number', $form_state['values']['tfa_basic_twilio_account_number']);
   }
   $phone_field = variable_get('tfa_basic_phone_field', '');
   if ($phone_field !== FALSE && !empty($form_state['values']['tfa_fallback']) && !empty($form_state['values']['tfa_fallback']['tfa_basic_sms']['enable']) && !empty($form_state['values']['tfa_basic_phone_field'])) {
