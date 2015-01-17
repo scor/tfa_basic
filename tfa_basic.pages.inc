@@ -293,11 +293,13 @@ function tfa_basic_setup_form($form, &$form_state, $account, $method = 'app_setu
     if (isset($form_state['storage']['method'])) {
       $method = $form_state['storage']['method'];
     }
+    $context = array('uid' => $account->uid);
     switch ($method) {
       case 'app_setup':
         drupal_set_title(t('TFA setup - Application'));
         $form_state['storage']['methods'][] = $method;
-        $tfa_setup = new TfaSetup(array('setup' => 'TfaTotpSetup'), array('uid' => $account->uid));
+        $setup_plugin = new TfaTotpSetup($context);
+        $tfa_setup = new TfaSetup($setup_plugin, $context);
 
         if (!empty($tfa_data)) {
           $form['disclaimer'] = array(
@@ -312,7 +314,8 @@ function tfa_basic_setup_form($form, &$form_state, $account, $method = 'app_setu
       case 'trust_device':
         drupal_set_title(t('TFA setup - Trusted browsers'));
         $form_state['storage']['methods'][] = $method;
-        $tfa_setup = new TfaSetup(array('setup' => 'TfaTrustedDeviceSetup'), array('uid' => $account->uid));
+        $setup_plugin = new TfaTrustedDeviceSetup($context);
+        $tfa_setup = new TfaSetup($setup_plugin, $context);
         $form = $tfa_setup->getForm($form, $form_state);
         $form_state['storage'][$method] = $tfa_setup;
         break;
@@ -320,7 +323,8 @@ function tfa_basic_setup_form($form, &$form_state, $account, $method = 'app_setu
       case 'recovery_codes':
         drupal_set_title(t('TFA setup - Recovery codes'));
         $form_state['storage']['methods'][] = $method;
-        $tfa_setup = new TfaSetup(array('setup' => 'TfaBasicRecoveryCodeSetup'), array('uid' => $account->uid));
+        $setup_plugin = new TfaBasicRecoveryCodeSetup($context);
+        $tfa_setup = new TfaSetup($setup_plugin, $context);
         $form = $tfa_setup->getForm($form, $form_state);
         $form_state['storage'][$method] = $tfa_setup;
         break;
@@ -483,7 +487,9 @@ function tfa_basic_setup_form_submit($form, &$form_state) {
   elseif (!empty($form_state['values']['sms_number'])) {
     // Send code to number.
     $form_state['storage']['sms_number'] = $form_state['values']['sms_number'];
-    $tfa_setup = new TfaSetup(array('setup' => 'TfaBasicSmsSetup'), array('uid' => $account->uid, 'mobile_number' => $form_state['storage']['sms_number']));
+    $context = array('uid' => $account->uid, 'mobile_number' => $form_state['storage']['sms_number']);
+    $setup_plugin = new TfaBasicSmsSetup($context, $form_state['storage']['sms_number']);
+    $tfa_setup = new TfaSetup($setup_plugin, $context);
     $tfa_setup->begin();
     $errors = $tfa_setup->getErrorMessages();
     if (!empty($errors)) {

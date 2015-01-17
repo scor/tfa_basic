@@ -8,7 +8,7 @@ class TfaBasicSms extends TfaBasePlugin implements TfaValidationPluginInterface,
 
   protected $mobileNumber;
 
-  public function __construct(array $context) {
+  public function __construct(array $context, $mobile_number) {
     parent::__construct($context);
     if (!empty($context['validate_context']) && !empty($context['validate_context']['code'])) {
       $this->code = $context['validate_context']['code'];
@@ -18,7 +18,8 @@ class TfaBasicSms extends TfaBasePlugin implements TfaValidationPluginInterface,
     $this->client = new Services_Twilio($sid, $token);
     $this->twilioNumber = variable_get('tfa_basic_twilio_account_number', '');
     $this->codeLength = 6;
-    $this->mobileNumber = '';
+
+    $this->mobileNumber = $mobile_number;
     if (!empty($context['mobile_number'])) {
       $this->mobileNumber = $context['mobile_number'];
     }
@@ -111,13 +112,7 @@ class TfaBasicSms extends TfaBasePlugin implements TfaValidationPluginInterface,
   }
 
   protected function getAccountNumber() {
-    if (!empty($this->mobileNumber)) {
-      return $this->mobileNumber;
-    }
-    else {
-      $account = user_load($this->context['uid']);
-      return tfa_basic_get_mobile_number($account);
-    }
+    return $this->mobileNumber;
   }
 
   /**
@@ -156,8 +151,8 @@ class TfaBasicSms extends TfaBasePlugin implements TfaValidationPluginInterface,
  */
 class TfaBasicSmsSetup extends TfaBasicSms implements TfaSetupPluginInterface {
 
-  public function __construct(array $context) {
-    parent::__construct($context);
+  public function __construct(array $context, $mobile_number) {
+    parent::__construct($context, $mobile_number);
   }
 
   public function begin() {

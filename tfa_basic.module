@@ -155,6 +155,48 @@ function tfa_basic_tfa_api() {
 }
 
 /**
+ * Create TfaTotp plugin.
+ *
+ * @param array $context
+ * @return TfaTotp
+ */
+function tfa_basic_totp_create($context) {
+  return new TfaTotp($context);
+}
+
+/**
+ * Create TfaTrustedDevice plugin.
+ *
+ * @param array $context
+ * @return TfaTrustedDevice
+ */
+function tfa_basic_trusted_device_create($context) {
+  return new TfaTrustedDevice($context);
+}
+
+/**
+ * Create TfaBasicRecoveryCode plugin.
+ *
+ * @param array $context
+ * @return TfaBasicRecoveryCode
+ */
+function tfa_basic_recovery_code_create($context) {
+  return new TfaBasicRecoveryCode($context);
+}
+
+/**
+ * Create TfaBasicSms plugin.
+ *
+ * @param array $context
+ * @return TfaBasicSms
+ */
+function tfa_basic_sms_create($context) {
+  $account = user_load($context['uid']);
+  $number = tfa_basic_get_mobile_number($account);
+  return new TfaBasicSms($context, $number);
+}
+
+/**
  * Alters tfa_context array to set plugins from user settings.
  */
 function tfa_basic_tfa_context_alter(&$context) {
@@ -162,7 +204,6 @@ function tfa_basic_tfa_context_alter(&$context) {
   if (empty($context)) {
     return;
   }
-  $api = module_invoke_all('tfa_api');
 
   $account = user_load($context['uid']);
   $tfa_data = tfa_basic_get_tfa_data($account);
@@ -174,7 +215,7 @@ function tfa_basic_tfa_context_alter(&$context) {
   if (in_array('tfa_basic_sms', variable_get('tfa_fallback_plugins', array())) && (empty($tfa_data['data']['sms']) || !$number)) {
     $fallback_plugins = array();
     foreach ($context['plugins']['fallback'] as $plugin) {
-      if ($plugin !== $api['tfa_basic_sms']['class']) {
+      if ($plugin !== 'tfa_basic_sms') {
         $fallback_plugins[] = $plugin;
       }
     }
