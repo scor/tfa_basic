@@ -10,6 +10,7 @@ files[] = includes/tfa_totp.inc
 files[] = includes/tfa_trusted_device.inc
 files[] = includes/tfa_recovery.inc
 files[] = includes/tfa_sms.inc
+files[] = includes/tfa_help.inc
 
 files[] = includes/googleauthenticator/GoogleAuthenticator.php
 files[] = includes/twilio-php/Services/Twilio.php

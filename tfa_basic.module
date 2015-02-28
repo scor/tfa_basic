@@ -151,6 +151,10 @@ function tfa_basic_tfa_api() {
       'class' => 'TfaBasicSms',
       'name' => 'Twilio SMS',
     ),
+    'tfa_basic_help' => array(
+      'class' => 'TfaBasicHelp',
+      'name' => 'Help page',
+    ),
   );
 }
 
@@ -448,6 +452,7 @@ function tfa_basic_form_tfa_admin_settings_alter(&$form, &$form_state, $form_id)
   // Disallow recovery codes and SMS from being used as default validation.
   unset($form['tfa_validate']['#options']['tfa_basic_recovery_code']);
   unset($form['tfa_validate']['#options']['tfa_basic_sms']);
+  unset($form['tfa_validate']['#options']['tfa_basic_help']);
 
   // Add cookie domain field to TFA admin settings.
   $form['tfa_basic_cookie_domain'] = array(
@@ -543,6 +548,21 @@ function tfa_basic_form_tfa_admin_settings_alter(&$form, &$form_state, $form_id)
     $form['tfa_fallback']['tfa_basic_sms']['enable']['#description'] = t('Not available for use because Twilio PHP library is not installed. See TFA Basic README.txt.');
   }
 
+  $form['tfa_fallback']['tfa_basic_help']['weight']['#default_value'] = 10;
+  $form['tfa_fallback']['tfa_basic_help']['weight']['#disabled'] = TRUE;
+  $default_help = t('Contact support to reset your access');
+  $form['tfa_basic_help_text'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Help page text'),
+    '#default_value' => variable_get('tfa_basic_help_text', $default_help),
+    '#description' => t('Text to display on help page. Plain text only.'),
+    '#states' => array(
+      'visible' => array(
+        ':input[name="tfa_fallback[tfa_basic_help][enable]"]' => array('checked' => TRUE)
+      )
+    ),
+  );
+
   $form['#validate'][] = 'tfa_basic_form_validate';
   $form['#submit'][] = 'tfa_basic_form_submit';
 }
@@ -605,6 +625,9 @@ function tfa_basic_form_submit($form, &$form_state) {
   }
   if (!empty($form_state['values']['tfa_basic_twilio_message_text'])) {
     variable_set('tfa_basic_twilio_message_text', $form_state['values']['tfa_basic_twilio_message_text']);
+  }
+  if (!empty($form_state['values']['tfa_basic_help_text'])) {
+    variable_set('tfa_basic_help_text', $form_state['values']['tfa_basic_help_text']);
   }
   $phone_field = variable_get('tfa_basic_phone_field', '');
   if ($phone_field !== FALSE && !empty($form_state['values']['tfa_fallback']) && !empty($form_state['values']['tfa_fallback']['tfa_basic_sms']['enable']) && !empty($form_state['values']['tfa_basic_phone_field'])) {
