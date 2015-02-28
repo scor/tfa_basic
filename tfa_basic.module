@@ -496,6 +496,18 @@ function tfa_basic_form_tfa_admin_settings_alter(&$form, &$form_state, $form_id)
         ),
       ),
     );
+    $form['tfa_basic_twilio_message_text'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Twilio message text'),
+      '#default_value' => variable_get('tfa_basic_twilio_message_text',
+        'Login code: !code'),
+      '#description' => t('Text to be sent to the user. Use !code for the verification code.'),
+      '#states' => array(
+        'visible' => array(
+          ':input[name="tfa_fallback[tfa_basic_sms][enable]"]' => array('checked' => TRUE),
+        ),
+      ),
+    );
 
     // Mobile phone storage field. Set variable to FALSE to ignore.
     $phone_field = variable_get('tfa_basic_phone_field', '');
@@ -562,6 +574,12 @@ function tfa_basic_form_validate($form, &$form_state) {
     if (empty($values['tfa_basic_twilio_account_number'])) {
       form_set_error('tfa_basic_twilio_account_number', t('Account number is required if Twilio SMS plugin is enabled.'));
     }
+    if (empty($values['tfa_basic_twilio_message_text'])) {
+      form_set_error('tfa_basic_twilio_message_text', t('Message text is required if Twilio SMS plugin is enabled.'));
+    }
+    elseif (strpos($values['tfa_basic_twilio_message_text'], '!code') === FALSE) {
+      form_set_error('tfa_basic_twilio_message_text', t('Message text must include token !code.'));
+    }
     $phone_field = variable_get('tfa_basic_phone_field', '');
     if ($phone_field !== FALSE && empty($values['tfa_basic_phone_field'])) {
       form_set_error('', t('An account field for mobile number storage is required to use the Twilio SMS plugin. Consult TFA Basic README.txt for more info.'));
@@ -584,6 +602,9 @@ function tfa_basic_form_submit($form, &$form_state) {
   }
   if (!empty($form_state['values']['tfa_basic_twilio_account_number'])) {
     variable_set('tfa_basic_twilio_account_number', $form_state['values']['tfa_basic_twilio_account_number']);
+  }
+  if (!empty($form_state['values']['tfa_basic_twilio_message_text'])) {
+    variable_set('tfa_basic_twilio_message_text', $form_state['values']['tfa_basic_twilio_message_text']);
   }
   $phone_field = variable_get('tfa_basic_phone_field', '');
   if ($phone_field !== FALSE && !empty($form_state['values']['tfa_fallback']) && !empty($form_state['values']['tfa_fallback']['tfa_basic_sms']['enable']) && !empty($form_state['values']['tfa_basic_phone_field'])) {

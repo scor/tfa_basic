@@ -18,6 +18,8 @@ class TfaBasicSms extends TfaBasePlugin implements TfaValidationPluginInterface,
     $this->client = new Services_Twilio($sid, $token);
     $this->twilioNumber = variable_get('tfa_basic_twilio_account_number', '');
     $this->codeLength = 6;
+    $this->messageText = variable_get('tfa_basic_twilio_message_text',
+      'Login code: !code');
 
     $this->mobileNumber = $mobile_number;
     if (!empty($context['mobile_number'])) {
@@ -124,7 +126,7 @@ class TfaBasicSms extends TfaBasePlugin implements TfaValidationPluginInterface,
   protected function sendCode($code) {
     $to = $this->getAccountNumber();
     try {
-      $message = $this->client->account->messages->sendMessage($this->twilioNumber, $to, "Login code: " . $code);
+      $message = $this->client->account->messages->sendMessage($this->twilioNumber, $to, t($this->messageText, array('!code' => $code)));
       // @todo Consider storing date_sent or date_updated to inform user.
       watchdog('tfa_basic', 'Message !id sent to user !uid on @sent', array(
         '@sent' => $message->date_sent,
