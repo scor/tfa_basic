@@ -236,7 +236,7 @@ function tfa_basic_disable_form_submit($form, &$form_state) {
   ), WATCHDOG_NOTICE);
 
   // E-mail account to inform user that it has been disabled.
-  drupal_mail('tfa_basic', 'disable', $account->mail, user_preferred_language($account), $params);
+  drupal_mail('tfa_basic', 'tfa_basic_disabled_configuration', $account->mail, user_preferred_language($account), $params);
 
   drupal_set_message(t('TFA has been disabled.'));
   $form_state['redirect'] = 'user/' . $account->uid . '/security/tfa';
