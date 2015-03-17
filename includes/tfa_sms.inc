@@ -1,13 +1,31 @@
 <?php
 
+/**
+ * @file
+ * Class TfaBasicSms.
+ */
+
 class TfaBasicSms extends TfaBasePlugin implements TfaValidationPluginInterface, TfaSendPluginInterface {
 
+  /**
+   * @var Services_Twilio
+   */
   protected $client;
 
+  /**
+   * @var string
+   */
   protected $twilioNumber;
 
+  /**
+   * @var string
+   */
   protected $mobileNumber;
 
+  /**
+   * @param array $context
+   * @param string $mobile_number
+   */
   public function __construct(array $context, $mobile_number) {
     parent::__construct($context);
     if (!empty($context['validate_context']) && !empty($context['validate_context']['code'])) {
@@ -18,8 +36,7 @@ class TfaBasicSms extends TfaBasePlugin implements TfaValidationPluginInterface,
     $this->client = new Services_Twilio($sid, $token);
     $this->twilioNumber = variable_get('tfa_basic_twilio_account_number', '');
     $this->codeLength = 6;
-    $this->messageText = variable_get('tfa_basic_twilio_message_text',
-      'Login code: !code');
+    $this->messageText = variable_get('tfa_basic_twilio_message_text', 'Login code: !code');
 
     $this->mobileNumber = $mobile_number;
     if (!empty($context['mobile_number'])) {
@@ -28,7 +45,7 @@ class TfaBasicSms extends TfaBasePlugin implements TfaValidationPluginInterface,
   }
 
   /**
-   *
+   * {@inheritdoc}
    */
   public function begin() {
     if (!$this->code) {
@@ -39,6 +56,9 @@ class TfaBasicSms extends TfaBasePlugin implements TfaValidationPluginInterface,
     }
   }
 
+  /**
+   * {@inheritdoc}
+   */
   public function getForm(array $form, array &$form_state) {
     $form['code'] = array(
       '#type' => 'textfield',
@@ -46,11 +66,13 @@ class TfaBasicSms extends TfaBasePlugin implements TfaValidationPluginInterface,
       '#required' => TRUE,
       '#description' => t('Enter @length-character code sent to your device.', array('@length' => $this->codeLength)),
     );
-    // @todo optionally report on when code was sent/delivered.
+
+    // @todo Optionally report on when code was sent/delivered.
     $form['actions']['login'] = array(
       '#type' => 'submit',
       '#value' => t('Verify'),
     );
+
     $form['actions']['resend'] = array(
       '#type' => 'submit',
       '#value' => t('Resend'),
@@ -61,6 +83,9 @@ class TfaBasicSms extends TfaBasePlugin implements TfaValidationPluginInterface,
     return $form;
   }
 
+  /**
+   * {@inheritdoc}
+   */
   public function validateForm(array $form, array &$form_state) {
     // If operation is resend then do not attempt to validate code.
     if ($form_state['values']['op'] === $form_state['values']['resend']) {
@@ -75,6 +100,9 @@ class TfaBasicSms extends TfaBasePlugin implements TfaValidationPluginInterface,
     }
   }
 
+  /**
+   * {@inheritdoc}
+   */
   public function submitForm(array $form, array &$form_state) {
     // Resend code if pushed.
     if ($form_state['values']['op'] === $form_state['values']['resend']) {
@@ -85,6 +113,7 @@ class TfaBasicSms extends TfaBasePlugin implements TfaValidationPluginInterface,
       else {
         drupal_set_message(t('Code resent'));
       }
+
       return FALSE;
     }
     else {
@@ -103,6 +132,9 @@ class TfaBasicSms extends TfaBasePlugin implements TfaValidationPluginInterface,
     );
   }
 
+  /**
+   * {@inheritdoc}
+   */
   protected function generate() {
     $characters = '0123456789';
     $string = '';
@@ -110,9 +142,13 @@ class TfaBasicSms extends TfaBasePlugin implements TfaValidationPluginInterface,
     for ($p = 0; $p < $this->codeLength; $p++) {
       $string .= $characters[mt_rand(0, $max)];
     }
+
     return $string;
   }
 
+  /**
+   * @return string
+   */
   protected function getAccountNumber() {
     return $this->mobileNumber;
   }
@@ -121,28 +157,43 @@ class TfaBasicSms extends TfaBasePlugin implements TfaValidationPluginInterface,
    * Send the code via the client.
    *
    * @param string $code
+   *
    * @return bool
    */
   protected function sendCode($code) {
     $to = $this->getAccountNumber();
+
     try {
+      // @todo User input should not be sent through t().
       $message = $this->client->account->messages->sendMessage($this->twilioNumber, $to, t($this->messageText, array('!code' => $code)));
       // @todo Consider storing date_sent or date_updated to inform user.
-      watchdog('tfa_basic', 'Message !id sent to user !uid on @sent', array(
-        '@sent' => $message->date_sent,
-        '!id' => $message->sid,
-        '!uid' => $this->context['uid'],
-      ), WATCHDOG_INFO);
+      watchdog(
+        'tfa_basic',
+        'Message !id sent to user !uid on @sent',
+        array(
+          '!id' => $message->sid,
+          '!uid' => $this->context['uid'],
+          '@sent' => $message->date_sent,
+        ),
+        WATCHDOG_INFO
+      );
+
       return TRUE;
     }
     catch (Services_Twilio_RestException $e) {
       // @todo Consider more detailed reporting by mapping Twilio error codes to
       // messages.
-      watchdog('tfa_basic', 'Twilio send message error to user !uid @code @link', array(
-        '!uid' => $this->context['uid'],
-        '@code' => $e->getStatus(),
-        '@link' => $e->getInfo(),
-        ), WATCHDOG_ERROR);
+      watchdog(
+        'tfa_basic',
+        'Twilio send message error to user !uid @code @link',
+        array(
+          '!uid' => $this->context['uid'],
+          '@code' => $e->getStatus(),
+          '@link' => $e->getInfo(),
+        ),
+        WATCHDOG_ERROR
+      );
+
       return FALSE;
     }
   }
@@ -153,22 +204,21 @@ class TfaBasicSms extends TfaBasePlugin implements TfaValidationPluginInterface,
  */
 class TfaBasicSmsSetup extends TfaBasicSms implements TfaSetupPluginInterface {
 
-  public function __construct(array $context, $mobile_number) {
-    parent::__construct($context, $mobile_number);
-  }
-
+  /**
+   * {@inheritdoc}
+   */
   public function begin() {
     if (empty($this->code)) {
       $this->code = $this->generate();
       if (!$this->sendCode($this->code)) {
-        // @todo decide on error text
+        // @todo Decide on error text.
         $this->errorMessages[''] = t('Unable to deliver code to that number.');
       }
     }
   }
 
   /**
-   * @copydoc TfaSetupPluginInterface::getSetupForm()
+   * {@inheritdoc}
    */
   public function getSetupForm(array $form, array &$form_state) {
     $form['code'] = array(
@@ -186,11 +236,12 @@ class TfaBasicSmsSetup extends TfaBasicSms implements TfaSetupPluginInterface {
   }
 
   /**
-   * @copydoc TfaSetupPluginInterface::validateSetupForm()
+   * {@inheritdoc}
    */
   public function validateSetupForm(array $form, array &$form_state) {
     if (!$this->validate($form_state['values']['code'])) {
       $this->errorMessages['code'] = t('Invalid code. Please try again.');
+
       return FALSE;
     }
     else {
@@ -199,7 +250,7 @@ class TfaBasicSmsSetup extends TfaBasicSms implements TfaSetupPluginInterface {
   }
 
   /**
-   * @copydoc TfaSetupPluginInterface::submitSetupForm()
+   * {@inheritdoc}
    */
   public function submitSetupForm(array $form, array &$form_state) {
     // No submission handling required.

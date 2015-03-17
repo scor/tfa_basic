@@ -1,7 +1,8 @@
 <?php
 
 /**
- * @file classes for TFA basic plugin
+ * @file
+ * Classes for TFA basic plugin.
  */
 
 /**
@@ -29,10 +30,15 @@ class TfaTrustedDevice extends TfaBasePlugin implements TfaLoginPluginInterface 
    */
   protected $expiration;
 
+  /**
+   * {@inheritdoc}
+   */
   public function __construct(array $context) {
     parent::__construct($context);
+
     $this->cookieName = variable_get('tfa_basic_cookie_name', 'TD');
     $this->domain = variable_get('tfa_basic_cookie_domain', '');
+
     // Expiration defaults to 30 days.
     $this->expiration = variable_get('tfa_basic_trust_cookie_expiration', 3600 * 24 * 30);
   }
@@ -43,13 +49,15 @@ class TfaTrustedDevice extends TfaBasePlugin implements TfaLoginPluginInterface 
   public function loginAllowed() {
     if (isset($_COOKIE[$this->cookieName]) && ($did = $this->trustedDevice($_COOKIE[$this->cookieName])) !== FALSE) {
       $this->setUsed($did);
+
       return TRUE;
     }
+
     return FALSE;
   }
 
   /**
-   * @copydoc TfaValidationPluginInterface::getForm()
+   * {@inheritdoc}
    */
   public function getForm(array $form, array &$form_state) {
     $form['trust_device'] = array(
@@ -57,11 +65,12 @@ class TfaTrustedDevice extends TfaBasePlugin implements TfaLoginPluginInterface 
       '#title' => t('Remember this browser?'),
       '#description' => t('Not recommended if you are on a public or shared computer.'),
     );
+
     return $form;
   }
 
   /**
-   * @copydoc TfaBasePlugin::submitForm()
+   * {@inheritdoc}
    */
   public function submitForm(array $form, array &$form_state) {
     if (isset($form_state['values']['trust_device']) && $form_state['values']['trust_device']) {
@@ -72,9 +81,6 @@ class TfaTrustedDevice extends TfaBasePlugin implements TfaLoginPluginInterface 
     }
   }
 
-  /**
-   *
-   */
   public function finalize() {
     if ($this->trustDevice) {
       $name = $this->getAgent();
@@ -96,6 +102,7 @@ class TfaTrustedDevice extends TfaBasePlugin implements TfaLoginPluginInterface 
    * Store device value and issue cookie for user.
    *
    * @param string $value
+   *
    * @param string $name
    */
   protected function setTrusted($value, $name = '') {
@@ -103,17 +110,25 @@ class TfaTrustedDevice extends TfaBasePlugin implements TfaLoginPluginInterface 
     $record = array(
       'uid' => $this->context['uid'],
       'value' => $value,
-      'created' => REQUEST_TIME,
+      'created' => $this->requestTime,
       'ip' => ip_address(),
       'name' => $name,
     );
     drupal_write_record('tfa_trusted_device', $record);
     // Issue cookie with ID.
     $cookie_secure = ini_get('session.cookie_secure');
-    $expiration = REQUEST_TIME + $this->expiration;
+    $expiration = $this->requestTime + $this->expiration;
     setcookie($this->cookieName, $value, $expiration, '/', $this->domain, (empty($cookie_secure) ? FALSE : TRUE), TRUE);
     $name = empty($name) ? $this->getAgent() : $name;
-    watchdog('tfa_basic', 'Set trusted browser for user UID !uid, browser @name', array('@name' => $name, '!uid' => $this->context['uid']), WATCHDOG_INFO);
+    watchdog(
+      'tfa_basic',
+      'Set trusted browser for user UID !uid, browser @name',
+      array(
+        '!uid' => $this->context['uid'],
+        '@name' => $name,
+      ),
+      WATCHDOG_INFO
+    );
   }
 
   /**
@@ -125,7 +140,7 @@ class TfaTrustedDevice extends TfaBasePlugin implements TfaLoginPluginInterface 
   protected function setUsed($did) {
     $record = array(
       'did' => $did,
-      'last_used' => REQUEST_TIME,
+      'last_used' => $this->requestTime,
     );
     drupal_write_record('tfa_trusted_device', $record, 'did');
   }
@@ -134,16 +149,13 @@ class TfaTrustedDevice extends TfaBasePlugin implements TfaLoginPluginInterface 
    * Check if device value matches user's saved device.
    *
    * @param string $value
+   *
    * @return int|FALSE
    *   Device ID if trusted or else FALSE.
    */
   protected function trustedDevice($value) {
     // Check if $id has been saved for this user.
-    $result = db_query("SELECT did FROM {tfa_trusted_device} WHERE value = :value AND uid = :uid", array(':value' => $value, ':uid' => $this->context['uid']))->fetchAssoc();
-    if (!empty($result)) {
-      return $result['did'];
-    }
-    return FALSE;
+    return db_result(db_query("SELECT did FROM {tfa_trusted_device} WHERE value = '%s' AND uid = %d", $value, $this->context['uid']));
   }
 
   /**
@@ -153,23 +165,31 @@ class TfaTrustedDevice extends TfaBasePlugin implements TfaLoginPluginInterface 
    *   Optional trusted device id to delete.
    *
    * @return int
+   *   Number of deleted rows.
    */
   protected function deleteTrusted($did = NULL) {
-    $query = db_delete('tfa_trusted_device')
-      ->condition('uid', $this->context['uid']);
+    $query_where = array('uid = %d');
+    $query_args = array($this->context['uid']);
+
     if (is_int($did)) {
-      $query->condition('did', $did);
+      $query_where[] = 'did = %d';
+      $query_args[] = $did;
     }
 
-    return $query->execute();
+    $query = 'DELETE FROM {tfa_trusted_device} WHERE ' . implode(' AND ', $query_where);
+    db_query($query, $query_args);
+
+    return db_affected_rows();
   }
 
   /**
    * Get simplified device name from user agent.
    *
-   * @param string $name Default name.
+   * @param string $name
+   *   Default name.
    *
    * @return string
+   *   Name of the browser.
    */
   protected function getAgent($name = '') {
     if (isset($_SERVER['HTTP_USER_AGENT'])) {
@@ -192,6 +212,7 @@ class TfaTrustedDevice extends TfaBasePlugin implements TfaLoginPluginInterface 
         $name = substr($agent, 0, 255);
       }
     }
+
     return $name;
   }
 
@@ -202,20 +223,17 @@ class TfaTrustedDevice extends TfaBasePlugin implements TfaLoginPluginInterface 
  */
 class TfaTrustedDeviceSetup extends TfaTrustedDevice implements TfaSetupPluginInterface {
 
-  public function __construct(array $context) {
-    parent::__construct($context);
-  }
-
   /**
-   * @copydoc TfaSetupPluginInterface::getSetupForm()
+   * {@inheritdoc}
    */
   public function getSetupForm(array $form, array &$form_state) {
     $existing = $this->getTrustedDevices();
     $time = variable_get('tfa_basic_trust_cookie_expiration', 3600 * 24 * 30) / (3600 * 24);
     $form['info'] = array(
       '#type' => 'markup',
-      '#markup' => '<p>' . t("Trusted browsers are a method for simplifying log in by avoiding TFA code entry for a set amount of time, !time days from marking a browser as trusted. After !time days, to log in you'll need to enter a TFA code with your username and password during which you can again mark the browser as trusted.", array('!time' => $time)) . '</p>',
+      '#value' => '<p>' . t("Trusted browsers are a method for simplifying log in by avoiding TFA code entry for a set amount of time, !time days from marking a browser as trusted. After !time days, to log in you'll need to enter a TFA code with your username and password during which you can again mark the browser as trusted.", array('!time' => $time)) . '</p>',
     );
+
     // Present option to trust this browser if its not currently trusted.
     if (isset($_COOKIE[$this->cookieName]) && ($device_id = $this->trustedDevice($_COOKIE[$this->cookieName])) !== FALSE) {
       $current_trusted = $device_id;
@@ -249,11 +267,13 @@ class TfaTrustedDeviceSetup extends TfaTrustedDevice implements TfaSetupPluginIn
         '#description' => t('Leave checked to keep these browsers in your trusted log in list.'),
         '#tree' => TRUE,
       );
+
       foreach ($existing as $device) {
         $vars = array(
           '!set' => format_date($device['created']),
           '!time' => format_date($device['last_used']),
         );
+
         if ($current_trusted == $device['id']) {
           $name = '<strong>' . t('@name (current browser)', array('@name' => $device['name'])) . '</strong>';
         }
@@ -266,6 +286,7 @@ class TfaTrustedDeviceSetup extends TfaTrustedDevice implements TfaSetupPluginIn
         else {
           $message = t('Marked trusted !set, last used for log in !time', $vars);
         }
+
         $form['existing']['trusted_device_' . $device['id']] = array(
           '#type' => 'checkbox',
           '#title' => $name,
@@ -274,6 +295,7 @@ class TfaTrustedDeviceSetup extends TfaTrustedDevice implements TfaSetupPluginIn
         );
       }
     }
+
     $form['actions']['save'] = array(
       '#type' => 'submit',
       '#value' => t('Save'),
@@ -283,14 +305,15 @@ class TfaTrustedDeviceSetup extends TfaTrustedDevice implements TfaSetupPluginIn
   }
 
   /**
-   * @copydoc TfaSetupPluginInterface::validateSetupForm()
+   * {@inheritdoc}
    */
   public function validateSetupForm(array $form, array &$form_state) {
-    return TRUE; // Do nothing, no validation required.
+    // Do nothing, no validation required.
+    return TRUE;
   }
 
   /**
-   * @copydoc TfaSetupPluginInterface::submitSetupForm()
+   * {@inheritdoc}
    */
   public function submitSetupForm(array $form, array &$form_state) {
     if (isset($form_state['values']['existing'])) {
@@ -302,6 +325,7 @@ class TfaTrustedDeviceSetup extends TfaTrustedDevice implements TfaSetupPluginIn
           $count++;
         }
       }
+
       if ($count) {
         watchdog('tfa_basic', 'Removed !num TFA trusted browsers during trusted browser setup', array('!num' => $count), WATCHDOG_INFO);
       }
@@ -318,36 +342,24 @@ class TfaTrustedDeviceSetup extends TfaTrustedDevice implements TfaSetupPluginIn
 
       $this->setTrusted($this->generateDeviceId(), $name);
     }
+
     return TRUE;
   }
 
   /**
    * Get list of trusted devices.
-   *
-   * @return array
    */
   public function getTrustedDevices() {
-    $devices = array();
-    $result = db_query("SELECT did, name, ip, created, last_used FROM {tfa_trusted_device} WHERE uid = :uid", array(':uid' => $this->context['uid']));
-    if ($result) {
-      foreach ($result as $row) {
-        $devices[] = array(
-          'id' => $row->did,
-          'name' => $row->name,
-          'created' => $row->created,
-          'ip' => $row->ip,
-          'last_used' => $row->last_used,
-        );
-      }
-    }
-    return $devices;
+    return db_query('SELECT did, name, created, ip, last_used FROM {tfa_trusted_device} WHERE uid = %d', $this->context['uid']);
   }
 
   /**
    * Delete a trusted device by its ID.
    *
    * @param int $id
+   *
    * @return int
+   *   Number of deleted rows.
    */
   public function deleteTrustedId($id) {
     return $this->deleteTrusted($id);
@@ -357,6 +369,7 @@ class TfaTrustedDeviceSetup extends TfaTrustedDevice implements TfaSetupPluginIn
    * Delete all trusted devices.
    *
    * @return int
+   *   Number of deleted rows.
    */
   public function deleteTrustedDevices() {
     return $this->deleteTrusted();

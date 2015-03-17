@@ -1,7 +1,8 @@
 <?php
 
 /**
- * @file classes for tfa_totp
+ * @file
+ * Classes for tfa_totp.
  */
 
 /**
@@ -20,7 +21,7 @@ class TfaTotp extends TfaBasePlugin implements TfaValidationPluginInterface {
   protected $timeSkew;
 
   /**
-   * @copydoc TfaBasePlugin::__construct()
+   * {@inheritdoc}
    */
   public function __construct(array $context) {
     parent::__construct($context);
@@ -32,14 +33,14 @@ class TfaTotp extends TfaBasePlugin implements TfaValidationPluginInterface {
   }
 
   /**
-   * @copydoc TfaBasePlugin::ready()
+   * {@inheritdoc}
    */
   public function ready() {
     return ($this->getSeed() !== FALSE);
   }
 
   /**
-   * @copydoc TfaValidationPluginInterface::getForm()
+   * {@inheritdoc}
    */
   public function getForm(array $form, array &$form_state) {
     $form['code'] = array(
@@ -59,11 +60,12 @@ class TfaTotp extends TfaBasePlugin implements TfaValidationPluginInterface {
   }
 
   /**
-   * @copydoc TfaValidationPluginInterface::validateForm()
+   * {@inheritdoc}
    */
   public function validateForm(array $form, array &$form_state) {
     if (!$this->validate($form_state['values']['code'])) {
       $this->errorMessages['code'] = t('Invalid application code. Please try again.');
+
       return FALSE;
     }
     else {
@@ -72,30 +74,33 @@ class TfaTotp extends TfaBasePlugin implements TfaValidationPluginInterface {
   }
 
   /**
-   * @copydoc TfaBasePlugin::validate()
+   * {@inheritdoc}
    */
   protected function validate($code) {
     // Get OTP seed.
     $seed = $this->getSeed();
     $this->isValid = ($seed && $this->ga->verifyCode($seed, $code, $this->timeSkew));
+
     return $this->isValid;
   }
 
   /**
    * Get seed for this account.
    *
-   * @return string Decrypted account OTP seed or FALSE if none exists.
+   * @return string
+   *   Decrypted account OTP seed or FALSE if none exists.
    */
   protected function getSeed() {
     // Lookup seed for account and decrypt.
-    $result = db_query("SELECT seed FROM {tfa_totp_seed} WHERE uid = :uid", array(':uid' => $this->context['uid']))->fetchAssoc();
-    if (!empty($result)) {
-      $encrypted = base64_decode($result['seed']);
+    $result = db_query('SELECT seed FROM {tfa_totp_seed} WHERE uid = %d', $this->context['uid']);
+    if (($row = db_fetch_object($result))) {
+      $encrypted = base64_decode($row->seed);
       $seed = $this->decrypt($encrypted);
       if (!empty($seed)) {
         return $seed;
       }
     }
+
     return FALSE;
   }
 
@@ -105,10 +110,9 @@ class TfaTotp extends TfaBasePlugin implements TfaValidationPluginInterface {
    * @return int
    */
   public function deleteSeed() {
-    $query = db_delete('tfa_totp_seed')
-      ->condition('uid', $this->context['uid']);
+    db_query('DELETE FROM {tfa_totp_seed} WHERE uid = %d', $this->context['uid']);
 
-    return $query->execute();
+    return db_affected_rows();
   }
 }
 
@@ -118,7 +122,9 @@ class TfaTotp extends TfaBasePlugin implements TfaValidationPluginInterface {
 class TfaTotpSetup extends TfaTotp implements TfaSetupPluginInterface {
 
   /**
-   * @var string Un-encrypted seed.
+   * Un-encrypted seed.
+   *
+   * @var string
    */
   protected $seed;
 
@@ -128,73 +134,117 @@ class TfaTotpSetup extends TfaTotp implements TfaSetupPluginInterface {
   protected $namePrefix;
 
   /**
-   * @copydoc TfaBasePlugin::__construct()
+   * {@inheritdoc}
    */
   public function __construct(array $context) {
     parent::__construct($context);
+
     // Generate seed.
     $this->seed = $this->createSeed();
     $this->namePrefix = variable_get('tfa_basic_name_prefix', variable_get('site_name', 'Drupal'));
   }
 
   /**
-   * @copydoc TfaSetupPluginInterface::getSetupForm()
+   * {@inheritdoc}
    */
   public function getSetupForm(array $form, array &$form_state) {
-    $items = array(
-      l('Google Authenticator (Android/iPhone/BlackBerry)', 'https://support.google.com/accounts/answer/1066447?hl=en', array('attributes' => array('target'=>'_blank'))),
-      l('Authy (Android/iPhone)', 'https://www.authy.com/thefuture#install-now', array('attributes' => array('target'=>'_blank'))),
-      l('Authenticator (Windows Phone)', 'http://www.windowsphone.com/en-us/store/app/authenticator/021dd79f-0598-e011-986b-78e7d1fa76f8', array('attributes' => array('target'=>'_blank'))),
-      l('FreeOTP (Android)', 'https://play.google.com/store/apps/details?id=org.fedorahosted.freeotp', array('attributes' => array('target'=>'_blank'))),
-      l('GAuth Authenticator (desktop)', 'https://github.com/gbraad/html5-google-authenticator', array('attributes' => array('target'=>'_blank')))
+    $options = array(
+      'external' => TRUE,
+      'attributes' => array(
+        'target' => '_blank',
+      ),
     );
+
+    $items = array(
+      l('Google Authenticator (Android/iPhone/BlackBerry)', 'https://support.google.com/accounts/answer/1066447?hl=en', $options),
+      l('Authy (Android/iPhone)', 'https://www.authy.com/thefuture#install-now', $options),
+      l('Authenticator (Windows Phone)', 'http://www.windowsphone.com/en-us/store/app/authenticator/021dd79f-0598-e011-986b-78e7d1fa76f8', $options),
+      l('FreeOTP (Android)', 'https://play.google.com/store/apps/details?id=org.fedorahosted.freeotp', $options),
+      l('GAuth Authenticator (desktop)', 'https://github.com/gbraad/html5-google-authenticator', $options)
+    );
+
     $form['apps'] = array(
       '#type' => 'markup',
-      '#markup' => theme('item_list', array('items' => $items, 'title' => t('Install authentication code application on your mobile or desktop device:'))),
+      '#value' => theme(
+        'item_list',
+        $items,
+        t('Install authentication code application on your mobile or desktop device:')
+      ),
     );
+
     $form['info'] = array(
       '#type' => 'markup',
-      '#markup' => t('<p>The two-factor authentication application will be used during this setup and for generating codes during regular authentication. If the application supports it, scan the QR code below to get the setup code otherwise you can manually enter the text code.</p>'),
+      '#value' => t('<p>The two-factor authentication application will be used during this setup and for generating codes during regular authentication. If the application supports it, scan the QR code below to get the setup code otherwise you can manually enter the text code.</p>'),
     );
+
     $form['seed'] = array(
       '#type' => 'textfield',
       '#value' => $this->seed,
       '#disabled' => TRUE,
       '#description' => t('Enter this code into your two-factor authentication app or scan the QR code below.'),
     );
+
     // QR image of seed.
-    if (file_exists(drupal_get_path('module', 'tfa_basic') . '/includes/qrcodejs/qrcode.min.js')) {
-      $form['qr_image_wrapper']['qr_image'] = array(
-        '#markup' => '<div id="tfa-qrcode"></div>',
+    // @todo Use libraries module.
+    $path = drupal_get_path('module', 'tfa_basic');
+    if (file_exists("$path/includes/qrcodejs/qrcode.min.js")) {
+      $qrcode_wrapper_id = form_clean_id('tfa-qrcode');
+      $qrcode_text = 'otpauth://totp/' . $this->accountName() . '?secret=' . $this->seed;
+
+      drupal_add_js("$path/includes/qrcodejs/qrcode.min.js");
+      drupal_add_js("$path/js/tfa_basic.qrcode.js");
+      drupal_add_js(
+        array(
+          'tfaBasic' => array(
+            'qrCodes' => array(
+              $qrcode_wrapper_id => array('text' => $qrcode_text),
+            ),
+          ),
+        ),
+        'setting'
       );
-      $qrdata = 'otpauth://totp/' . $this->accountName() . '?secret=' . $this->seed;
+
+      $form['qr_image_wrapper']['qr_image'] = array(
+        '#type' => 'markup',
+        '#value' => sprintf('<div class="tfa-qrcode" id="%s"></div>', $qrcode_wrapper_id),
+      );
+
       $form['qr_image_wrapper']['qr_image']['#attached']['library'][] = array('tfa_basic', 'qrcodejs');
       $form['qr_image_wrapper']['qr_image']['#attached']['js'][] = array(
-        'data' => 'jQuery(document).ready(function () { new QRCode(document.getElementById("tfa-qrcode"), "' . $qrdata . '");});',
+        'data' => 'jQuery(document).ready(function () { new QRCode(document.getElementById("tfa-qrcode"), "' . $qrcode_text . '");});',
         'type' => 'inline',
         'scope' => 'footer',
         'weight' => 5,
       );
     }
     else {
+      $attributes = drupal_attributes(array(
+        'src' => $this->getQrCodeUrl($this->seed),
+        'alt' => t('QR code for TFA setup'),
+      ));
       $form['qr_image'] = array(
-        '#markup' => '<img src="' . $this->getQrCodeUrl($this->seed) .'" alt="QR code for TFA setup">',
+        '#type' => 'markup',
+        '#value' => "<img$attributes>",
       );
     }
+
     // Include code entry form.
     $form = $this->getForm($form, $form_state);
     $form['actions']['login']['#value'] = t('Verify and save');
+
     // Alter code description.
     $form['code']['#description'] = t('A verification code will be generated after you scan the above QR code or manually enter the setup code. The verification code is six digits long.');
+
     return $form;
   }
 
   /**
-   * @copydoc TfaSetupPluginInterface::validateSetupForm()
+   * {@inheritdoc}
    */
   public function validateSetupForm(array $form, array &$form_state) {
     if (!$this->validate($form_state['values']['code'])) {
       $this->errorMessages['code'] = t('Invalid application code. Please try again.');
+
       return FALSE;
     }
     else {
@@ -203,18 +253,19 @@ class TfaTotpSetup extends TfaTotp implements TfaSetupPluginInterface {
   }
 
   /**
-   * @copydoc TfaBasePlugin::validate()
+   * {@inheritdoc}
    */
   protected function validate($code) {
     return $this->ga->verifyCode($this->seed, $code, $this->timeSkew);
   }
 
   /**
-   * @copydoc TfaSetupPluginInterface::submitSetupForm()
+   * {@inheritdoc}
    */
   public function submitSetupForm(array $form, array &$form_state) {
     // Write seed for user.
     $this->storeSeed($this->seed);
+
     return TRUE;
   }
 
@@ -222,7 +273,9 @@ class TfaTotpSetup extends TfaTotp implements TfaSetupPluginInterface {
    * Get a URL to a Google Chart QR image for a seed.
    *
    * @param string $seed
-   * @return string URL
+   *
+   * @return string
+   *   URL.
    */
   protected function getQrCodeUrl($seed) {
     // Note, this URL is over https but does leak the seed and account
@@ -234,7 +287,8 @@ class TfaTotpSetup extends TfaTotp implements TfaSetupPluginInterface {
   /**
    * Create OTP seed for account.
    *
-   * @return string Seed.
+   * @return string
+   *   Seed.
    */
   protected function createSeed() {
     return $this->ga->createSecret();
@@ -243,7 +297,8 @@ class TfaTotpSetup extends TfaTotp implements TfaSetupPluginInterface {
   /**
    * Save seed for account.
    *
-   * @param string $seed Seed.
+   * @param string $seed
+   *   Seed.
    */
   protected function storeSeed($seed) {
     // Encrypt seed for storage.
@@ -252,7 +307,7 @@ class TfaTotpSetup extends TfaTotp implements TfaSetupPluginInterface {
     $record = array(
       'uid' => $this->context['uid'],
       'seed' => base64_encode($encrypted),
-      'created' => REQUEST_TIME
+      'created' => time(),
     );
 
     $existing = $this->getSeed();
@@ -268,10 +323,12 @@ class TfaTotpSetup extends TfaTotp implements TfaSetupPluginInterface {
   /**
    * Get account name for QR image.
    *
-   * @return string URL encoded string.
+   * @return string
+   *   URL encoded string.
    */
   protected function accountName() {
     $account = user_load($this->context['uid']);
+
     return urlencode($this->namePrefix . '-' . $account->name);
   }
 

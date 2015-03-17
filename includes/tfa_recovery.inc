@@ -1,11 +1,12 @@
 <?php
 
 /**
- * @file class for TFA Basic
+ * @file
+ * Class for TFA Basic.
  */
 
 /**
- * Class TfaBasicRecoveryCode
+ * Class TfaBasicRecoveryCode.
  */
 class TfaBasicRecoveryCode extends TfaBasePlugin implements TfaValidationPluginInterface {
 
@@ -14,6 +15,9 @@ class TfaBasicRecoveryCode extends TfaBasePlugin implements TfaValidationPluginI
    */
   protected $usedCode;
 
+  /**
+   * {@inheritdoc}
+   */
   public function __construct(array $context) {
     parent::__construct($context);
     // Set in settings.php.
@@ -21,7 +25,7 @@ class TfaBasicRecoveryCode extends TfaBasePlugin implements TfaValidationPluginI
   }
 
   /**
-   * @copydoc TfaBasePlugin::ready()
+   * {@inheritdoc}
    */
   public function ready() {
     $codes = $this->getCodes();
@@ -29,7 +33,7 @@ class TfaBasicRecoveryCode extends TfaBasePlugin implements TfaValidationPluginI
   }
 
   /**
-   * @copydoc TfaBasePlugin::getForm()
+   * {@inheritdoc}
    */
   public function getForm(array $form, array &$form_state) {
     $form['recover'] = array(
@@ -39,31 +43,37 @@ class TfaBasicRecoveryCode extends TfaBasePlugin implements TfaValidationPluginI
       '#description' => t('Recovery codes were generated when you first set up TFA. Format: XXX XX XXX'),
       '#attributes' => array('autocomplete' => 'off'),
     );
+
     $form['actions']['login'] = array(
       '#type' => 'submit',
       '#value' => t('Verify'),
     );
+
     return $form;
   }
 
   /**
-   * @copydoc TfaBasePlugin::validateForm()
+   * {@inheritdoc}
    */
   public function validateForm(array $form, array &$form_state) {
     return $this->validate($form_state['values']['recover']);
   }
 
   /**
-   * @copydoc TfaBasePlugin::finalize()
+   * {@inheritdoc}
    */
   public function finalize() {
     // Mark code as used.
     if ($this->usedCode) {
-      $num = db_update('tfa_recovery_code')
-        ->fields(array('used' => REQUEST_TIME))
-        ->condition('id', $this->usedCode)
-        ->condition('uid', $this->context['uid'])
-        ->execute();
+      db_query(
+        'UPDATE {tfa_recovery_code} SET used = %d WHERE id = %d AND uid = %d',
+        time(),
+        $this->usedCode,
+        $this->context['uid']
+      );
+
+      $num = db_affected_rows();
+
       if ($num) {
         watchdog('tfa_basic', 'Used TFA recovery code !id by user !uid', array('!id' => $this->usedCode, '!uid' => $this->context['uid']), WATCHDOG_NOTICE);
       }
@@ -82,22 +92,23 @@ class TfaBasicRecoveryCode extends TfaBasePlugin implements TfaValidationPluginI
   public function getCodes() {
     // Lookup codes for account and decrypt.
     $codes = array();
-    $result = db_query("SELECT id, code FROM {tfa_recovery_code} WHERE uid = :uid AND used = 0", array(':uid' => $this->context['uid']));
-    if (!empty($result)) {
-      foreach ($result as $data) {
-        $encrypted = base64_decode($data->code);
+    $result = db_query("SELECT id, code FROM {tfa_recovery_code} WHERE uid = %d AND used = %d", $this->context['uid'], 0);
+    if ($result) {
+      while (($recovery = db_fetch_object($result))) {
+        $encrypted = base64_decode($recovery->code);
         // trim() prevents extraneous escape characters.
         $code = trim($this->decrypt($encrypted));
         if (!empty($code)) {
-          $codes[$data->id] = $code;
+          $codes[$recovery->id] = $code;
         }
       }
     }
+
     return $codes;
   }
 
   /**
-   * @copydoc TfaBasePlugin::validate()
+   * {@inheritdoc}
    */
   protected function validate($code) {
     $this->isValid = FALSE;
@@ -105,8 +116,10 @@ class TfaBasicRecoveryCode extends TfaBasePlugin implements TfaValidationPluginI
     $codes = $this->getCodes();
     if (empty($codes)) {
       $this->errorMessages['code'] = t('You have no unused codes available.');
+
       return FALSE;
     }
+
     // Remove empty spaces.
     $code = str_replace(' ', '', $code);
     foreach ($codes as $id => $stored) {
@@ -114,10 +127,12 @@ class TfaBasicRecoveryCode extends TfaBasePlugin implements TfaValidationPluginI
       if (str_replace(' ', '', $stored) === $code) {
         $this->isValid = TRUE;
         $this->usedCode = $id;
+
         return $this->isValid;
       }
     }
     $this->errorMessages['code'] = t('Invalid recovery code.');
+
     return $this->isValid;
   }
 
@@ -138,25 +153,28 @@ class TfaBasicRecoveryCodeSetup extends TfaBasicRecoveryCode implements TfaSetup
    */
   protected $codes;
 
+  /**
+   * {@inheritdoc}
+   */
   public function __construct(array $context) {
     parent::__construct($context);
     $this->codeLimit = variable_get('tfa_recovery_codes_amount', 10);
   }
 
   /**
-   * @copydoc TfaSetupPluginInterface::getSetupForm()
+   * {@inheritdoc}
    */
   public function getSetupForm(array $form, array &$form_state) {
-
     $this->codes = $this->generateCodes();
 
     $form['codes'] = array(
       '#type' => 'item',
       '#title' => t('Your recovery codes'),
       '#description' => t('Print, save, or write down these codes for use in case you are without your application and need to log in.'),
-      '#markup' => theme('item_list', array('items' => $this->codes)),
+      '#value' => theme('item_list', $this->codes),
       '#attributes' => array('class' => array('recovery-codes')),
     );
+
     $form['actions']['save'] = array(
       '#type' => 'submit',
       '#value' => t('Save'),
@@ -166,7 +184,7 @@ class TfaBasicRecoveryCodeSetup extends TfaBasicRecoveryCode implements TfaSetup
   }
 
   /**
-   * @copydoc TfaSetupPluginInterface::validateSetupForm()
+   * {@inheritdoc}
    */
   public function validateSetupForm(array $form, array &$form_state) {
     // Do nothing, TfaBasicRecoveryCodeSetup has no form inputs.
@@ -174,10 +192,11 @@ class TfaBasicRecoveryCodeSetup extends TfaBasicRecoveryCode implements TfaSetup
   }
 
   /**
-   * @copydoc TfaSetupPluginInterface::submitSetupForm()
+   * {@inheritdoc}
    */
   public function submitSetupForm(array $form, array &$form_state) {
     $this->storeCodes($this->codes);
+
     return TRUE;
   }
 
@@ -188,19 +207,17 @@ class TfaBasicRecoveryCodeSetup extends TfaBasicRecoveryCode implements TfaSetup
    */
   public function deleteCodes() {
     // Delete any existing codes.
-    $num_deleted = db_delete('tfa_recovery_code')
-      ->condition('uid', $this->context['uid'])
-      ->execute();
-    return $num_deleted;
+    db_query('DELETE FROM {tfa_recovery_code} WHERE uid = %d', $this->context['uid']);
+
+    return db_affected_rows();
   }
 
   /**
-   * Overide TfaBasePlugin::generate().
-   *
-   * @return string
+   * {@inheritdoc}
    */
   protected function generate() {
     $code = $this->generateBlock(3) . ' ' . $this->generateBlock(2) . ' ' . $this->generateBlock(3);
+
     return $code;
   }
 
@@ -208,6 +225,7 @@ class TfaBasicRecoveryCodeSetup extends TfaBasicRecoveryCode implements TfaSetup
    * Generate block of random digits.
    *
    * @param int $length
+   *
    * @return string
    */
   protected function generateBlock($length) {
@@ -232,6 +250,7 @@ class TfaBasicRecoveryCodeSetup extends TfaBasicRecoveryCode implements TfaSetup
     for ($i = 0; $i < $this->codeLimit; $i++) {
       $codes[] = $this->generate();
     }
+
     return $codes;
   }
 
@@ -249,7 +268,7 @@ class TfaBasicRecoveryCodeSetup extends TfaBasicRecoveryCode implements TfaSetup
       $record = array(
         'uid' => $this->context['uid'],
         'code' => base64_encode($encrypted),
-        'created' => REQUEST_TIME
+        'created' => time(),
       );
       drupal_write_record('tfa_recovery_code', $record);
     }
@@ -258,6 +277,7 @@ class TfaBasicRecoveryCodeSetup extends TfaBasicRecoveryCode implements TfaSetup
     if ($num_deleted) {
       $message .= ' and deleted !del old codes';
     }
+
     watchdog('tfa_basic', $message, array('!uid' => $this->context['uid'], '!del' => $num_deleted), WATCHDOG_INFO);
   }
 }

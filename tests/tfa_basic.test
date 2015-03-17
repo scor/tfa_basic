@@ -1,7 +1,7 @@
 <?php
 
 /**
- * @file tfa_basic.test.
+ * @file
  * Drupal test cases for TFA basic plugins.
  */
 
@@ -28,8 +28,11 @@ class TfaBasicTestCase extends DrupalWebTestCase {
   /**
    * @var stdClass
    */
-  protected $web_user;
+  protected $webUserTfa;
 
+  /**
+   * Provide information about this test scenario.
+   */
   public static function getInfo() {
     return array(
       'name' => 'TFA Basic tests',
@@ -38,13 +41,21 @@ class TfaBasicTestCase extends DrupalWebTestCase {
     );
   }
 
+  /**
+   * {@inheritdoc}
+   */
   public function setUp() {
     // Enable TFA module and the test module.
-    parent::setUp('tfa', 'tfa_basic');
-    // Use PHPGangsta_GoogleAuthenticator to create codes for TOTP seed.
-    require_once drupal_get_path('module', 'tfa_basic') . '/includes/googleauthenticator/GoogleAuthenticator.php';
+    parent::setUp('autoload', 'token', 'tfa', 'tfa_basic');
+
+    autoload_registry_rebuild();
+
     $this->ga = new PHPGangsta_GoogleAuthenticator();
-    $this->web_user = $this->drupalCreateUser(array('access content', 'setup own tfa'));
+    $this->webUserTfa = $this->drupalCreateUser(array(
+      'access content',
+      'setup own tfa',
+      'require tfa',
+    ));
   }
 
   public function testTfaBasic() {
@@ -55,20 +66,19 @@ class TfaBasicTestCase extends DrupalWebTestCase {
   public function _testAppAndRecoverySetup() {
     variable_set('tfa_enabled', FALSE);
 
-    $account = $this->web_user;
-    $this->drupalLogin($account);
+    $this->drupalLogin($this->webUserTfa);
 
     // Enable TFA and begin configuration.
     variable_set('tfa_enabled', TRUE);
     variable_set('tfa_validate_plugin', 'tfa_basic_totp');
     variable_set('tfa_fallback_plugins', array('tfa_basic_recovery_code'));
 
-    $this->drupalGet('user/' . $account->uid . '/security/tfa');
+    $this->drupalGet('user/' . $this->webUserTfa->uid . '/security/tfa');
 
     $this->assertLink($this->uiStrings('setup-app'));
 
     // Set up application.
-    $this->drupalGet('user/' . $account->uid . '/security/tfa/app-setup');
+    $this->drupalGet('user/' . $this->webUserTfa->uid . '/security/tfa/app-setup');
 
     $this->assertText($this->uiStrings('password-request'));
     // Test incorrect password.
@@ -79,7 +89,7 @@ class TfaBasicTestCase extends DrupalWebTestCase {
     $this->assertText($this->uiStrings('pass-error'));
 
     $edit = array(
-      'current_pass' => $account->pass_raw,
+      'current_pass' => $this->webUserTfa->pass_raw,
     );
     $this->drupalPost(NULL, $edit, 'Confirm');
 
@@ -121,11 +131,11 @@ class TfaBasicTestCase extends DrupalWebTestCase {
     $this->assertText($this->uiStrings('setup-complete'));
 
     // Logout to test TFA app process.
-    $this->drupalGet('user/logout');
+    $this->drupalGet('logout');
 
     $edit = array(
-      'name' => $account->name,
-      'pass' => $account->pass_raw,
+      'name' => $this->webUserTfa->name,
+      'pass' => $this->webUserTfa->pass_raw,
     );
     // Do not use drupalLogin() since it tests for actual login.
     $this->drupalPost('user/login', $edit, 'Log in');
@@ -138,43 +148,43 @@ class TfaBasicTestCase extends DrupalWebTestCase {
     $edit = array(
       'code' => $this->randomName(),
     );
-    $this->drupalPost('system/tfa/' . $account->uid . '/' . $login_hash, $edit, 'Verify');
+    $this->drupalPost('system/tfa/' . $this->webUserTfa->uid . '/' . $login_hash, $edit, 'Verify');
     $this->assertText($this->uiStrings('invalid-code-retry'));
 
     // Submit valid code.
     $edit = array(
       'code' => $this->ga->getCode($this->seed),
     );
-    $this->drupalPost('system/tfa/' . $account->uid . '/' . $login_hash, $edit, 'Verify');
+    $this->drupalPost('system/tfa/' . $this->webUserTfa->uid . '/' . $login_hash, $edit, 'Verify');
     $this->assertText('My account');
 
     // Logout to test recovery code process.
-    $this->drupalGet('user/logout');
+    $this->drupalGet('logout');
 
     $edit = array(
-      'name' => $account->name,
-      'pass' => $account->pass_raw,
+      'name' => $this->webUserTfa->name,
+      'pass' => $this->webUserTfa->pass_raw,
     );
     $this->drupalPost('user/login', $edit, 'Log in');
     $url_parts = explode('/', $this->url);
     $login_hash = array_pop($url_parts);
 
     // Begin fallback.
-    $this->drupalPost('system/tfa/' . $account->uid . '/' . $login_hash, array(), $this->uiStrings('fallback-button'));
+    $this->drupalPost('system/tfa/' . $this->webUserTfa->uid . '/' . $login_hash, array(), $this->uiStrings('fallback-button'));
     $this->assertText($this->uiStrings('recovery-prompt'));
 
     // Try invalid code.
     $edit = array(
       'recover' => $this->randomName(),
     );
-    $this->drupalPost('system/tfa/' . $account->uid . '/' . $login_hash, $edit, 'Verify');
+    $this->drupalPost('system/tfa/' . $this->webUserTfa->uid . '/' . $login_hash, $edit, 'Verify');
     $this->assertText($this->uiStrings('invalid-recovery-code'));
 
     // Submit valid code.
     $edit = array(
       'recover' => array_pop($this->recoveryCodes),
     );
-    $this->drupalPost('system/tfa/' . $account->uid . '/' . $login_hash, $edit, 'Verify');
+    $this->drupalPost('system/tfa/' . $this->webUserTfa->uid . '/' . $login_hash, $edit, 'Verify');
     $this->assertText('My account');
   }
 
@@ -182,42 +192,60 @@ class TfaBasicTestCase extends DrupalWebTestCase {
    * TFA module user interface strings.
    *
    * @param string $id
+   *
    * @return string
    */
   protected function uiStrings($id) {
     switch ($id) {
       case 'setup-app':
         return 'Set up application';
+
       case 'password-request':
         return 'Enter your current password to continue.';
+
       case 'pass-error':
         return 'Incorrect password';
+
       case 'app-step1':
         return 'Install authentication code application on your mobile or desktop device';
+
       case 'invalid-code-retry':
         return 'Invalid application code. Please try again.';
+
       case 'invalid-recovery-code':
         return 'Invalid recovery code.';
+
       case 'set-trust-skip':
         return 'Mark this browser as trusted or skip to continue and finish TFA setup';
+
       case 'set-recovery-codes':
         return 'Save recovery codes or skip to complete TFA setup.';
+
       case 'setup-complete':
         return 'TFA setup complete';
+
       case 'setup-trust':
         return 'Set trusted browsers';
+
       case 'setup-recovery':
         return 'Get recovery codes';
+
       case 'code-list':
         return 'View unused recovery codes';
+
       case 'app-desc':
         return 'Verification code is application generated and 6 digits long.';
+
       case 'fallback-button':
-        return 'Can\'t access your account?';
+        return "Can't access your account?";
+
       case 'recovery-prompt':
         return 'Enter one of your recovery codes';
+
       case 'tfa-status-enabled':
         return 'TFA enabled';
     }
+
+    return NULL;
   }
 }

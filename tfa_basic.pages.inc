@@ -1,15 +1,22 @@
 <?php
 
 /**
- * @param $account
- * @return string
+ * @file
+ * Standard page callbacks.
  */
-function tfa_basic_overview($form, &$form_state, $account) {
 
-  $output['info'] = array(
+/**
+ * @param array $form_state
+ * @param object $account
+ *
+ * @return array
+ */
+function tfa_basic_overview(&$form_state, $account) {
+  $form['info'] = array(
     '#type' => 'markup',
-    '#markup' => '<p>' . t('Two-factor authentication (TFA) provides additional security for your account. With TFA enabled, you log in to the site with a uniquely generated code in addition to your username and password.') . '</p>',
+    '#value' => '<p>' . t('Two-factor authentication (TFA) provides additional security for your account. With TFA enabled, you log in to the site with a uniquely generated code in addition to your username and password.') . '</p>',
   );
+
   $form_state['storage']['account'] = $account;
   $user_tfa = tfa_basic_get_tfa_data($account);
   $enabled = isset($user_tfa['status']) && $user_tfa['status'] ? TRUE : FALSE;
@@ -21,48 +28,53 @@ function tfa_basic_overview($form, &$form_state, $account) {
     else {
       $status_text = t('Status: <strong>TFA disabled</strong>, set !time', array('!time' => format_date($user_tfa['saved'])));
     }
-    $output['status'] = array(
+
+    $form['status'] = array(
       '#type' => 'markup',
-      '#markup' => '<p>' . $status_text . '</p>',
+      '#value' => '<p>' . $status_text . '</p>',
     );
   }
 
   // Application setup.
-  $output['app'] = array(
+  $form['app'] = array(
     '#type' => 'fieldset',
     '#title' => t('TFA application'),
     '#description' => t('Generate TFA codes for log in from a mobile or desktop application.'),
   );
+
   $setup_text = !$enabled ? t('Set up application') : t('Reset application');
-  $output['app']['link'] = array(
+  $form['app']['link'] = array(
     '#type' => 'markup',
-    '#markup' => l($setup_text, 'user/' . $account->uid . '/security/tfa/app-setup'),
+    '#value' => l($setup_text, 'user/' . $account->uid . '/security/tfa/app-setup'),
   );
 
   // SMS setup.
   $phone_field = variable_get('tfa_basic_phone_field', '');
   if ($enabled && $phone_field !== '' && in_array('tfa_basic_sms', variable_get('tfa_fallback_plugins', array()))) {
-    $output['sms'] = array(
+    $form['sms'] = array(
       '#type' => 'fieldset',
       '#title' => t('SMS fallback'),
       '#description' => t('Receive TFA code via SMS if you are are unable to use mobile application during log in.'),
     );
+
     $mobile_number = tfa_basic_get_mobile_number($account);
     if (!empty($user_tfa['data']['sms']) && $mobile_number !== FALSE) {
-      $output['sms']['number'] = array(
+      $form['sms']['number'] = array(
         '#type' => 'markup',
-        '#markup' => '<p>' . t('Optional delivery to @number', array('@number' => tfa_basic_format_number($mobile_number))) . '</p>',
+        '#value' => '<p>' . t('Optional delivery to @number', array('@number' => tfa_basic_format_number($mobile_number))) . '</p>',
       );
     }
+
     if (empty($user_tfa['data']['sms'])) {
       $sms_text = t('Set up SMS delivery');
     }
     else {
       $sms_text = t('Reset SMS delivery');
     }
-    $output['sms']['link'] = array(
+
+    $form['sms']['link'] = array(
       '#type' => 'markup',
-      '#markup' => l($sms_text, 'user/' . $account->uid . '/security/tfa/sms-setup'),
+      '#value' => l($sms_text, 'user/' . $account->uid . '/security/tfa/sms-setup'),
     );
   }
 
@@ -76,65 +88,72 @@ function tfa_basic_overview($form, &$form_state, $account) {
         '@browser' => $device['name'],
         '!time' => format_date($device['last_used']),
       );
+
       if (empty($device['last_used'])) {
         $message = t('@browser, set !set', $vars);
       }
       else {
         $message = t('@browser, set !set, last used !time', $vars);
       }
+
       $trusted_browsers[] = $message;
     }
+
     $time = variable_get('tfa_basic_trust_cookie_expiration', 3600 * 24 * 30) / (3600 * 24);
-    $output['trust'] = array(
+    $form['trust'] = array(
       '#type' => 'fieldset',
       '#title' => t('Trusted browsers'),
       '#description' => t('Browsers that will not require TFA during log in for !time days from first set.', array('!time' => $time)),
     );
+
     if (!empty($trusted_browsers)) {
-      $output['trust']['list'] = array(
+      $form['trust']['list'] = array(
         '#type' => 'markup',
-        '#markup' => theme('item_list', array('items' => $trusted_browsers)),
+        '#value' => theme('item_list', $trusted_browsers),
       );
     }
-    $output['trust']['link'] = array(
+
+    $form['trust']['link'] = array(
       '#type' => 'markup',
-      '#markup' => l(t('Set trusted browsers'), 'user/' . $account->uid . '/security/tfa/trusted-browsers'),
+      '#value' => l(t('Set trusted browsers'), 'user/' . $account->uid . '/security/tfa/trusted-browsers'),
     );
   }
 
   // Recovery codes.
   if ($enabled && in_array('tfa_basic_recovery_code', variable_get('tfa_fallback_plugins', array()))) {
     $recovery = new TfaBasicRecoveryCodeSetup(array('uid' => $account->uid));
-    $output['recovery'] = array(
+    $form['recovery'] = array(
       '#type' => 'fieldset',
       '#title' => t('Recovery codes'),
       '#description' => t('Pre-generated, one-time-use codes that allow log in instead of the TFA application code.'),
     );
+
     $recovery_codes = $recovery->getCodes();
     if (empty($recovery_codes)) {
       $codes_text = t('Get recovery codes');
     }
     else {
-      $output['recovery']['list'] = array(
+      $form['recovery']['list'] = array(
         '#type' => 'markup',
-        '#markup' => '<p>' . l(t('View unused recovery codes'), 'user/' . $account->uid . '/security/tfa/recovery-codes-list') . '</p>',
+        '#value' => '<p>' . l(t('View unused recovery codes'), 'user/' . $account->uid . '/security/tfa/recovery-codes-list') . '</p>',
       );
       $codes_text = t('Get new recovery codes');
     }
-    $output['recovery']['link'] = array(
+
+    $form['recovery']['link'] = array(
       '#type' => 'markup',
-      '#markup' => l($codes_text, 'user/' . $account->uid . '/security/tfa/recovery-codes'),
+      '#value' => l($codes_text, 'user/' . $account->uid . '/security/tfa/recovery-codes'),
     );
   }
 
   if ($enabled) {
-    $output['disable'] = array(
+    $form['disable'] = array(
       '#type' => 'markup',
-      '#markup' => '<p>' . l(t('Disable TFA'), 'user/' . $account->uid . '/security/tfa/disable') . '</p>',
+      '#value' => '<p>' . l(t('Disable TFA'), 'user/' . $account->uid . '/security/tfa/disable') . '</p>',
     );
   }
 
-  return $output;
+  return $form;
 }
 
 function tfa_basic_disable_form($form, &$form_state, $account) {
@@ -157,15 +176,19 @@ function tfa_basic_disable_form($form, &$form_state, $account) {
       $notice_desc = t('Your settings and data will be lost and you will be unable to log back into the site. To regain access contact a site administrator.');
     }
   }
+
   $form['preamble'] = array(
     '#prefix' => '<p class="preamble">',
     '#suffix' => '</p>',
-    '#markup' => $preamble_desc,
+    '#type' => 'markup',
+    '#value' => $preamble_desc,
   );
+
   $form['notice'] = array(
     '#prefix' => '<p class="preamble">',
     '#suffix' => '</p>',
-    '#markup' => $notice_desc,
+    '#type' => 'markup',
+    '#value' => $notice_desc,
   );
 
   $form['account']['current_pass'] = array(
@@ -177,14 +200,17 @@ function tfa_basic_disable_form($form, &$form_state, $account) {
     '#attributes' => array('autocomplete' => 'off'),
     '#required' => TRUE,
   );
+
   $form['account']['mail'] = array(
     '#type' => 'value',
     '#value' => $account->mail,
   );
+
   $form['actions']['submit'] = array(
     '#type' => 'submit',
     '#value' => t('Disable'),
   );
+
   $form['actions']['cancel'] = array(
     '#type' => 'submit',
     '#value' => t('Cancel'),
@@ -200,9 +226,7 @@ function tfa_basic_disable_form($form, &$form_state, $account) {
  */
 function tfa_basic_disable_form_validate($form, &$form_state) {
   $account = $form_state['storage']['account'];
-  // Check password. (from user.module user_validate_current_pass()).
-  require_once DRUPAL_ROOT . '/' . variable_get('password_inc', 'includes/password.inc');
-  $current_pass = user_check_password($form_state['values']['current_pass'], $account);
+  $current_pass = tfa_user_check_password($account->name, $form_state['values']['current_pass']);
   if (!$current_pass) {
     form_set_error('current_pass', t("Incorrect password."));
   }
@@ -216,8 +240,10 @@ function tfa_basic_disable_form_submit($form, &$form_state) {
   if ($form_state['values']['op'] === $form_state['values']['cancel']) {
     drupal_set_message(t('TFA disable canceled.'));
     $form_state['redirect'] = 'user/' . $account->uid . '/security/tfa';
+
     return;
   }
+
   $params = array('account' => $account);
   tfa_basic_setup_save_data($account, array('status' => FALSE));
   // Delete TOTP code.
@@ -245,7 +271,7 @@ function tfa_basic_disable_form_submit($form, &$form_state) {
 /**
  * TFA setup form router.
  */
-function tfa_basic_setup_form($form, &$form_state, $account, $method = 'app_setup') {
+function tfa_basic_setup_form(&$form_state, $account, $method = 'app_setup') {
   global $user;
 
   $form['account'] = array(
@@ -269,6 +295,7 @@ function tfa_basic_setup_form($form, &$form_state, $account, $method = 'app_setu
     else {
       $current_pass_description = t('Enter your current password to continue.');
     }
+
     $form['current_pass'] = array(
       '#type' => 'password',
       '#title' => t('Current password'),
@@ -277,10 +304,12 @@ function tfa_basic_setup_form($form, &$form_state, $account, $method = 'app_setu
       '#description' => $current_pass_description,
       '#attributes' => array('autocomplete' => 'off'),
     );
+
     $form['submit'] = array(
       '#type' => 'submit',
       '#value' => t('Confirm'),
     );
+
     $form['cancel'] = array(
       '#type' => 'submit',
       '#value' => t('Cancel'),
@@ -304,7 +333,7 @@ function tfa_basic_setup_form($form, &$form_state, $account, $method = 'app_setu
         if (!empty($tfa_data)) {
           $form['disclaimer'] = array(
             '#type' => 'markup',
-            '#markup' => '<p>' . t('Note: You should delete the old account in your mobile or desktop app before adding this new one.') . '</p>',
+            '#value' => '<p>' . t('Note: You should delete the old account in your mobile or desktop app before adding this new one.') . '</p>',
           );
         }
         $form = $tfa_setup->getForm($form, $form_state);
@@ -333,12 +362,13 @@ function tfa_basic_setup_form($form, &$form_state, $account, $method = 'app_setu
         $recovery = new TfaBasicRecoveryCodeSetup(array('uid' => $account->uid));
         $codes = $recovery->getCodes();
 
-        $output = theme('item_list', array('items' => $codes));
+        $output = theme('item_list', $codes);
         $output .= l(t('Return to account TFA overview'), 'user/' . $account->uid . '/security/tfa');
         $form['output'] = array(
           '#type' => 'markup',
-          '#markup' => $output,
+          '#value' => $output,
         );
+
         // Return early.
         return $form;
 
@@ -431,12 +461,11 @@ function tfa_basic_setup_form_validate($form, &$form_state) {
     if ($account->uid != $user->uid && user_access('administer users')) {
       $account = $user;
     }
-    // Check password. (from user.module user_validate_current_pass()).
-    require_once DRUPAL_ROOT . '/' . variable_get('password_inc', 'includes/password.inc');
-    $current_pass = user_check_password($form_state['values']['current_pass'], $account);
+    $current_pass = tfa_user_check_password($account->name, $form_state['values']['current_pass']);
     if (!$current_pass) {
       form_set_error('current_pass', t("Incorrect password."));
     }
+
     return;
   }
   elseif (isset($form_state['values']['cancel']) && $form_state['values']['op'] === $form_state['values']['cancel']) {
@@ -452,10 +481,12 @@ function tfa_basic_setup_form_validate($form, &$form_state) {
         form_set_error('number', $error);
       }
     }
+
     return;
   }
   elseif (!empty($form_state['storage']['method'])) {
     $method = $form_state['storage']['method'];
+    /** @var TfaSetup $tfa_setup */
     $tfa_setup = $form_state['storage'][$method];
     if (!$tfa_setup->validateForm($form, $form_state)) {
       foreach ($tfa_setup->getErrorMessages() as $element => $message) {
@@ -477,6 +508,7 @@ function tfa_basic_setup_form_submit($form, &$form_state) {
     $form_state['redirect'] = 'user/' . $account->uid . '/security/tfa';
     return;
   }
+
   // Password validation.
   if (isset($form_state['values']['current_pass'])) {
     $form_state['storage']['pass_confirmed'] = TRUE;
@@ -502,8 +534,10 @@ function tfa_basic_setup_form_submit($form, &$form_state) {
       $form_state['storage']['sms_setup'] = $tfa_setup;
     }
     $form_state['rebuild'] = TRUE;
+
     return;
   }
+
   // Disabling SMS delivery.
   if (isset($form_state['values']['sms_disable']) && $form_state['values']['op'] === $form_state['values']['sms_disable']) {
     tfa_basic_setup_save_data($account, array('sms' => FALSE));
@@ -551,11 +585,13 @@ function tfa_basic_setup_form_submit($form, &$form_state) {
         }
         break;
     }
+
     // Trigger multi-step plugins if this process began with application setup.
     if (in_array('app_setup', $form_state['storage']['methods']) && function_exists('_tfa_basic_' . $method . '_next_step')) {
       $function = '_tfa_basic_' . $method . '_next_step';
       $function($form_state, $form_state);
     }
+
     // Return if multi-step.
     if (isset($form_state['rebuild']) && $form_state['rebuild']) {
       return;
@@ -626,13 +662,15 @@ function _tfa_basic_trust_device_next_step(&$form, &$form_state) {
  * Output unused recovery codes.
  *
  * @param stdClass $account
+ *
  * @return string
  */
 function tfa_basic_recovery_codes_list($account) {
   $recovery = new TfaBasicRecoveryCodeSetup(array('uid' => $account->uid));
   $codes = $recovery->getCodes();
 
-  $output = theme('item_list', array('items' => $codes));
+  $output = theme('item_list', $codes);
   $output .= l(t('Return to account TFA overview'), 'user/' . $account->uid . '/security/tfa');
+
   return $output;
 }

@@ -12,6 +12,6 @@ function tfa_basic_drush_sql_sync_sanitize($site) {
   $sql = "TRUNCATE TABLE tfa_totp_seed;";
   $sql .= "TRUNCATE TABLE tfa_trusted_device;";
   $sql .= "TRUNCATE TABLE tfa_recovery_code;";
-  drush_sql_register_post_sync_op('tfa_basic', dt('Remove sensitive TFA data.'), $sql);
 
+  drush_sql_register_post_sync_op('tfa_basic', dt('Remove sensitive TFA data.'), $sql);
 }

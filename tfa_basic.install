@@ -1,10 +1,14 @@
 <?php
 
 /**
+ * @file
+ * Install and uninstall functions of TFA Basic module.
+ */
+
+/**
  * Implements hook_schema().
  */
 function tfa_basic_schema() {
-
   $schema['tfa_user_settings'] = array(
     'fields' => array(
       'uid' => array(
@@ -146,6 +150,37 @@ function tfa_basic_schema() {
 }
 
 /**
+ * Implements hook_install().
+ */
+function tfa_basic_install() {
+  drupal_install_schema('tfa_basic');
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function tfa_basic_uninstall() {
+  drupal_uninstall_schema('tfa_basic');
+
+  // Delete TFA Basic variables.
+  variable_del('tfa_basic_cookie_domain');
+  variable_del('tfa_basic_help_text');
+  variable_del('tfa_basic_phone_field');
+  variable_del('tfa_basic_twilio_account_sid');
+  variable_del('tfa_basic_twilio_account_token');
+  variable_del('tfa_basic_twilio_account_number');
+  variable_del('tfa_basic_twilio_message_text');
+
+  // Variables without UI.
+  variable_del('tfa_basic_cookie_name');
+  variable_del('tfa_basic_name_prefix');
+  variable_del('tfa_basic_secret_key');
+  variable_del('tfa_basic_time_skew');
+  variable_del('tfa_basic_trust_cookie_expiration');
+  variable_del('tfa_recovery_codes_amount');
+}
+
+/**
  * Create new database table {tfa_recovery_code}.
  */
 function tfa_basic_update_7001() {
@@ -185,20 +220,9 @@ function tfa_basic_update_7001() {
       'uid' => array('uid'),
     ),
   );
-  db_create_table('tfa_recovery_code', $schema['tfa_recovery_code']);
-}
 
-/**
- * Implement hook_uninstall().
- */
-function tfa_basic_uninstall() {
-  // Delete TFA Basic variables.
-  variable_del('tfa_basic_secret_key');
-  variable_del('tfa_basic_time_skew');
-  variable_del('tfa_recovery_codes_amount');
-  variable_del('tfa_basic_trust_cookie_expiration');
-  variable_del('tfa_basic_name_prefix');
-  variable_del('tfa_basic_cookie_name');
-  variable_del('tfa_basic_twilio_account_sid');
-  variable_del('tfa_basic_twilio_account_token');
+  $return = array();
+  db_create_table($return, 'tfa_recovery_code', $schema['tfa_recovery_code']);
+
+  return $return;
 }
