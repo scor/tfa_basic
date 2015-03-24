@@ -47,7 +47,6 @@ class TfaTotp extends TfaBasePlugin implements TfaValidationPluginInterface {
       '#type' => 'textfield',
       '#title' => t('Application verification code'),
       '#description' => t('Verification code is application generated and !length digits long.', array('!length' => $this->codeLength)),
-      '#required' => TRUE,
       '#attributes' => array('autocomplete' => 'off'),
     );
 
@@ -63,14 +62,23 @@ class TfaTotp extends TfaBasePlugin implements TfaValidationPluginInterface {
    * {@inheritdoc}
    */
   public function validateForm(array $form, array &$form_state) {
-    if (!$this->validate($form_state['values']['code'])) {
+    if ($form_state['values']['op'] != $form['actions']['login']['#value']) {
+      // Not the "Verify" button was clicked.
+      return TRUE;
+    }
+
+    if (trim($form_state['values']['code']) == '') {
+      $this->errorMessages['code'] = t('!name field is required.', array('!name' => $form['code']['#title']));
+
+      return FALSE;
+    }
+    elseif (!$this->validate($form_state['values']['code'])) {
       $this->errorMessages['code'] = t('Invalid application code. Please try again.');
 
       return FALSE;
     }
-    else {
-      return TRUE;
-    }
+
+    return TRUE;
   }
 
   /**
