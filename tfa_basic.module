@@ -758,7 +758,7 @@ If you ever lose the device you configured, you should act quickly to delete its
  *   Message body.
  */
 function tfa_basic_tfa_disabled_body($message, $params) {
-  $text = t('[user:name],
+  $text = t('[user],
 
 Two-factor authentication has been disabled on your account.
 
