@@ -156,10 +156,12 @@ function tfa_basic_overview(&$form_state, $account) {
   return $form;
 }
 
-function tfa_basic_disable_form($form, &$form_state, $account) {
+function tfa_basic_disable_form(&$form_state, $account) {
   global $user;
 
   $form_state['storage']['account'] = $account;
+
+  $form = array();
 
   if ($account->uid != $user->uid && user_access('administer users')) {
     $preamble_desc = t('Are you sure you want to disable TFA on account %name?', array('%name' => $account->name));
@@ -170,7 +172,7 @@ function tfa_basic_disable_form($form, &$form_state, $account) {
   }
   else {
     $preamble_desc = t('Are you sure you want to disable your two-factor authentication setup?');
-    $notice_desc = t("Your settings and data will be lost. You can re-enable two-factor authentication again from your profile.");
+    $notice_desc = t('Your settings and data will be lost. You can re-enable two-factor authentication again from your profile.');
     if (user_access('require tfa', $account)) {
       drupal_set_message(t('Your account must have at least one two-factor authentication method enabled. Continuing will disable your ability to log back into this site.'), 'warning');
       $notice_desc = t('Your settings and data will be lost and you will be unable to log back into the site. To regain access contact a site administrator.');
@@ -198,9 +200,9 @@ function tfa_basic_disable_form($form, &$form_state, $account) {
     '#size' => 25,
     '#weight' => -5,
     '#attributes' => array('autocomplete' => 'off'),
-    '#required' => TRUE,
   );
 
+  // @todo Is this really necessary?
   $form['account']['mail'] = array(
     '#type' => 'value',
     '#value' => $account->mail,
@@ -214,8 +216,6 @@ function tfa_basic_disable_form($form, &$form_state, $account) {
   $form['actions']['cancel'] = array(
     '#type' => 'submit',
     '#value' => t('Cancel'),
-    '#limit_validation_errors' => array(),
-    '#submit' => array('tfa_basic_disable_form_submit'),
   );
 
   return $form;
@@ -225,10 +225,18 @@ function tfa_basic_disable_form($form, &$form_state, $account) {
  * Disable form validate.
  */
 function tfa_basic_disable_form_validate($form, &$form_state) {
-  $account = $form_state['storage']['account'];
-  $current_pass = tfa_user_check_password($account->name, $form_state['values']['current_pass']);
-  if (!$current_pass) {
-    form_set_error('current_pass', t("Incorrect password."));
+  if ($form_state['values']['op'] === $form['actions']['submit']['#value']) {
+    if (trim($form_state['values']['current_pass']) == '') {
+      form_set_error('current_pass', t('!name field is required.', array('!name' => $form['account']['current_pass']['#title'])));
+
+      return;
+    }
+
+    $account = $form_state['storage']['account'];
+    $current_pass = tfa_user_check_password($account->name, $form_state['values']['current_pass']);
+    if (!$current_pass) {
+      form_set_error('current_pass', t('Incorrect password.'));
+    }
   }
 }
 
@@ -239,33 +247,45 @@ function tfa_basic_disable_form_submit($form, &$form_state) {
   $account = $form_state['storage']['account'];
   if ($form_state['values']['op'] === $form_state['values']['cancel']) {
     drupal_set_message(t('TFA disable canceled.'));
+    $form_state['storage'] = array();
     $form_state['redirect'] = 'user/' . $account->uid . '/security/tfa';
 
     return;
   }
 
-  $params = array('account' => $account);
-  tfa_basic_setup_save_data($account, array('status' => FALSE));
-  // Delete TOTP code.
-  $totp = new TfaTotp(array('uid' => $account->uid));
-  $totp->deleteSeed();
-  // Delete recovery codes.
-  $recovery = new TfaBasicRecoveryCodeSetup(array('uid' => $account->uid));
-  $recovery->deleteCodes();
-  // Delete trusted devices.
-  $trusted = new TfaTrustedDeviceSetup(array('uid' => $account->uid));
-  $trusted->deleteTrustedDevices();
+  if ($form_state['values']['op'] === $form_state['values']['submit']) {
+    $params = array('account' => $account);
+    tfa_basic_setup_save_data($account, array('status' => FALSE));
 
-  watchdog('tfa_basic', 'TFA disabled for user @name UID !uid', array(
-    '@name' => $account->name,
-    '!uid' => $account->uid,
-  ), WATCHDOG_NOTICE);
+    // Delete TOTP code.
+    $totp = new TfaTotp(array('uid' => $account->uid));
+    $totp->deleteSeed();
 
-  // E-mail account to inform user that it has been disabled.
-  drupal_mail('tfa_basic', 'tfa_basic_disabled_configuration', $account->mail, user_preferred_language($account), $params);
+    // Delete recovery codes.
+    $recovery = new TfaBasicRecoveryCodeSetup(array('uid' => $account->uid));
+    $recovery->deleteCodes();
 
-  drupal_set_message(t('TFA has been disabled.'));
-  $form_state['redirect'] = 'user/' . $account->uid . '/security/tfa';
+    // Delete trusted devices.
+    $trusted = new TfaTrustedDeviceSetup(array('uid' => $account->uid));
+    $trusted->deleteTrustedDevices();
+
+    watchdog(
+      'tfa_basic',
+      'TFA disabled for user @name UID !uid',
+      array(
+        '@name' => $account->name,
+        '!uid' => $account->uid,
+      ),
+      WATCHDOG_NOTICE
+    );
+
+    // E-mail account to inform user that it has been disabled.
+    drupal_mail('tfa_basic', 'tfa_basic_disabled_configuration', $account->mail, user_preferred_language($account), $params);
+
+    drupal_set_message(t('TFA has been disabled.'));
+    $form_state['storage'] = array();
+    $form_state['redirect'] = 'user/' . $account->uid . '/security/tfa';
+  }
 }
 
 /**
