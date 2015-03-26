@@ -83,7 +83,7 @@ class TfaBasicRecoveryCode extends TfaBasePlugin implements TfaValidationPluginI
   /**
    * Get unused recovery codes.
    *
-   * @todo consider returning used codes so validate() can error with
+   * @todo Consider returning used codes so validate() can error with
    * appropriate message
    *
    * @return array

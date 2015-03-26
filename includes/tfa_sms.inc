@@ -5,6 +5,9 @@
  * Class TfaBasicSms.
  */
 
+/**
+ * Class TfaBasicSms.
+ */
 class TfaBasicSms extends TfaBasePlugin implements TfaValidationPluginInterface, TfaSendPluginInterface {
 
   /**
@@ -63,7 +66,6 @@ class TfaBasicSms extends TfaBasePlugin implements TfaValidationPluginInterface,
     $form['code'] = array(
       '#type' => 'textfield',
       '#title' => t('Verification Code'),
-      '#required' => TRUE,
       '#description' => t('Enter @length-character code sent to your device.', array('@length' => $this->codeLength)),
     );
 
@@ -76,8 +78,6 @@ class TfaBasicSms extends TfaBasePlugin implements TfaValidationPluginInterface,
     $form['actions']['resend'] = array(
       '#type' => 'submit',
       '#value' => t('Resend'),
-      '#submit' => array('tfa_form_submit'),
-      '#limit_validation_errors' => array(),
     );
 
     return $form;
@@ -88,16 +88,25 @@ class TfaBasicSms extends TfaBasePlugin implements TfaValidationPluginInterface,
    */
   public function validateForm(array $form, array &$form_state) {
     // If operation is resend then do not attempt to validate code.
-    if ($form_state['values']['op'] === $form_state['values']['resend']) {
+    if ($form_state['values']['op'] === $form['actions']['login']['#title']) {
       return TRUE;
     }
-    elseif (!parent::validate($form_state['values']['code'])) {
-      $this->errorMessages['code'] = t('Invalid code.');
-      return FALSE;
+
+    if ($form_state['values']['op'] === $form['actions']['resend']['#title']) {
+      if (trim($form_state['values']['code']) == '') {
+        $this->errorMessages['code'] = t('!name field is required.', array('!name' => $form['code']['#title']));
+
+        return FALSE;
+      }
+
+      if (!parent::validate($form_state['values']['code'])) {
+        $this->errorMessages['code'] = t('Invalid code.');
+
+        return FALSE;
+      }
     }
-    else {
-      return TRUE;
-    }
+
+    return TRUE;
   }
 
   /**
@@ -166,19 +175,6 @@ class TfaBasicSms extends TfaBasePlugin implements TfaValidationPluginInterface,
     try {
       // @todo User input should not be sent through t().
       $message = $this->client->account->messages->sendMessage($this->twilioNumber, $to, t($this->messageText, array('!code' => $code)));
-      // @todo Consider storing date_sent or date_updated to inform user.
-      watchdog(
-        'tfa_basic',
-        'Message !id sent to user !uid on @sent',
-        array(
-          '!id' => $message->sid,
-          '!uid' => $this->context['uid'],
-          '@sent' => $message->date_sent,
-        ),
-        WATCHDOG_INFO
-      );
-
-      return TRUE;
     }
     catch (Services_Twilio_RestException $e) {
       // @todo Consider more detailed reporting by mapping Twilio error codes to
@@ -196,6 +192,20 @@ class TfaBasicSms extends TfaBasePlugin implements TfaValidationPluginInterface,
 
       return FALSE;
     }
+
+    // @todo Consider storing date_sent or date_updated to inform user.
+    watchdog(
+      'tfa_basic',
+      'Message !id sent to user !uid on @sent',
+      array(
+        '!id' => $message->sid,
+        '!uid' => $this->context['uid'],
+        '@sent' => $message->date_sent,
+      ),
+      WATCHDOG_INFO
+    );
+
+    return TRUE;
   }
 }
 
@@ -224,9 +234,9 @@ class TfaBasicSmsSetup extends TfaBasicSms implements TfaSetupPluginInterface {
     $form['code'] = array(
       '#type' => 'textfield',
       '#title' => t('Verification Code'),
-      '#required' => TRUE,
       '#description' => t('Enter @length-character code sent to your device.', array('@length' => $this->codeLength)),
     );
+
     $form['actions']['verify'] = array(
       '#type' => 'submit',
       '#value' => t('Verify and save'),
@@ -239,14 +249,15 @@ class TfaBasicSmsSetup extends TfaBasicSms implements TfaSetupPluginInterface {
    * {@inheritdoc}
    */
   public function validateSetupForm(array $form, array &$form_state) {
-    if (!$this->validate($form_state['values']['code'])) {
-      $this->errorMessages['code'] = t('Invalid code. Please try again.');
+    if ($form_state['values']['op'] == $form['actions']['verify']['#value']) {
+      if (!$this->validate($form_state['values']['code'])) {
+        $this->errorMessages['code'] = t('Invalid code. Please try again.');
 
-      return FALSE;
+        return FALSE;
+      }
     }
-    else {
-      return TRUE;
-    }
+
+    return TRUE;
   }
 
   /**

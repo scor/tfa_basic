@@ -49,8 +49,7 @@ function tfa_basic_overview(&$form_state, $account) {
   );
 
   // SMS setup.
-  $phone_field = variable_get('tfa_basic_phone_field', '');
-  if ($enabled && $phone_field !== '' && in_array('tfa_basic_sms', variable_get('tfa_fallback_plugins', array()))) {
+  if ($enabled && in_array('tfa_basic_sms', variable_get('tfa_fallback_plugins', array()))) {
     $form['sms'] = array(
       '#type' => 'fieldset',
       '#title' => t('SMS fallback'),
@@ -196,7 +195,6 @@ function tfa_basic_disable_form(&$form_state, $account) {
   $form['account']['current_pass'] = array(
     '#type' => 'password',
     '#title' => t('Confirm your current password'),
-    '#description_display' => 'before',
     '#size' => 25,
     '#weight' => -5,
     '#attributes' => array('autocomplete' => 'off'),
@@ -225,6 +223,8 @@ function tfa_basic_disable_form(&$form_state, $account) {
  * Disable form validate.
  */
 function tfa_basic_disable_form_validate($form, &$form_state) {
+  global $user;
+
   if ($form_state['values']['op'] === $form['actions']['submit']['#value']) {
     if (trim($form_state['values']['current_pass']) == '') {
       form_set_error('current_pass', t('!name field is required.', array('!name' => $form['account']['current_pass']['#title'])));
@@ -233,8 +233,8 @@ function tfa_basic_disable_form_validate($form, &$form_state) {
     }
 
     $account = $form_state['storage']['account'];
-    $current_pass = tfa_user_check_password($account->name, $form_state['values']['current_pass']);
-    if (!$current_pass) {
+    $account_name = ($account->uid != $user->uid) ? $user->name : $account->name;
+    if (!tfa_user_check_password($account_name, $form_state['values']['current_pass'])) {
       form_set_error('current_pass', t('Incorrect password.'));
     }
   }
@@ -247,7 +247,8 @@ function tfa_basic_disable_form_submit($form, &$form_state) {
   $account = $form_state['storage']['account'];
   if ($form_state['values']['op'] === $form_state['values']['cancel']) {
     drupal_set_message(t('TFA disable canceled.'));
-    $form_state['storage'] = array();
+
+    $form_state['storage'] = NULL;
     $form_state['redirect'] = 'user/' . $account->uid . '/security/tfa';
 
     return;
@@ -283,7 +284,7 @@ function tfa_basic_disable_form_submit($form, &$form_state) {
     drupal_mail('tfa_basic', 'tfa_basic_disabled_configuration', $account->mail, user_preferred_language($account), $params);
 
     drupal_set_message(t('TFA has been disabled.'));
-    $form_state['storage'] = array();
+    $form_state['storage'] = NULL;
     $form_state['redirect'] = 'user/' . $account->uid . '/security/tfa';
   }
 }
@@ -304,12 +305,16 @@ function tfa_basic_setup_form(&$form_state, $account, $method = 'app_setup') {
   if (empty($tfa_data['status']) && $method != 'app_setup') {
     drupal_set_message(t('Set up TFA application before continuing with additional configurations.'), 'warning');
     drupal_goto('user/' . $account->uid . '/security/tfa');
+    // @todo The whole form build process should not be started if this
+    // condition is met.
+    // In the hook_menu() the 'page callback' should be something different than
+    // the 'drupal_get_form'.
   }
 
+  $form['#cache'] = TRUE;
   if (empty($form_state['storage'])) {
-
     // Allow administrators to change TFA settings for another account.
-    if ($account->uid != $user->uid && user_access('administer users')) {
+    if ($account->uid != $user->uid) {
       $current_pass_description = t('Enter your current password to alter TFA settings for account %name.', array('%name' => $account->name));
     }
     else {
@@ -320,7 +325,6 @@ function tfa_basic_setup_form(&$form_state, $account, $method = 'app_setup') {
       '#type' => 'password',
       '#title' => t('Current password'),
       '#size' => 25,
-      '#required' => TRUE,
       '#description' => $current_pass_description,
       '#attributes' => array('autocomplete' => 'off'),
     );
@@ -333,8 +337,6 @@ function tfa_basic_setup_form(&$form_state, $account, $method = 'app_setup') {
     $form['cancel'] = array(
       '#type' => 'submit',
       '#value' => t('Cancel'),
-      '#limit_validation_errors' => array(),
-      '#submit' => array('tfa_basic_setup_form_submit'),
     );
   }
   else {
@@ -342,11 +344,14 @@ function tfa_basic_setup_form(&$form_state, $account, $method = 'app_setup') {
     if (isset($form_state['storage']['method'])) {
       $method = $form_state['storage']['method'];
     }
+
     $context = array('uid' => $account->uid);
     switch ($method) {
       case 'app_setup':
         drupal_set_title(t('TFA setup - Application'));
-        $form_state['storage']['methods'][] = $method;
+
+        $form_state['storage']['methods'][$method] = $method;
+
         $setup_plugin = new TfaTotpSetup($context);
         $tfa_setup = new TfaSetup($setup_plugin, $context);
 
@@ -362,7 +367,9 @@ function tfa_basic_setup_form(&$form_state, $account, $method = 'app_setup') {
 
       case 'trust_device':
         drupal_set_title(t('TFA setup - Trusted browsers'));
-        $form_state['storage']['methods'][] = $method;
+
+        $form_state['storage']['methods'][$method] = $method;
+
         $setup_plugin = new TfaTrustedDeviceSetup($context);
         $tfa_setup = new TfaSetup($setup_plugin, $context);
         $form = $tfa_setup->getForm($form, $form_state);
@@ -371,7 +378,9 @@ function tfa_basic_setup_form(&$form_state, $account, $method = 'app_setup') {
 
       case 'recovery_codes':
         drupal_set_title(t('TFA setup - Recovery codes'));
-        $form_state['storage']['methods'][] = $method;
+
+        $form_state['storage']['methods'][$method] = $method;
+
         $setup_plugin = new TfaBasicRecoveryCodeSetup($context);
         $tfa_setup = new TfaSetup($setup_plugin, $context);
         $form = $tfa_setup->getForm($form, $form_state);
@@ -396,43 +405,37 @@ function tfa_basic_setup_form(&$form_state, $account, $method = 'app_setup') {
         drupal_set_title(t('TFA setup - SMS'));
         // First step is number entry.
         if (empty($form_state['storage'][$method])) {
+          $form_state['storage']['methods'][$method] = $method;
+
           $default_number = tfa_basic_get_mobile_number($account);
           $form['sms_number'] = array(
             '#type' => 'textfield',
             '#title' => t('Mobile phone number'),
-            '#required' => TRUE,
             '#description' => t('Enter your mobile phone number that can receive SMS codes. A code will be sent to this number for validation.'),
             '#default_value' => $default_number ?: '',
           );
-          $phone_field = variable_get('tfa_basic_phone_field', '');
-          if (!empty($phone_field)) {
-            // Report that this is an account field.
-            $field = field_info_instance('user', $phone_field, 'user');
-            $form['sms_number']['#description'] .= ' ' . t('This number is stored on your account under field %label.', array('%label' => $field['label']));
-          }
+
           $form['send'] = array(
             '#type' => 'submit',
             '#value' => t('Send SMS'),
           );
-          $form_state['storage']['methods'][] = $method;
+
           if (!empty($tfa_data['data']['sms'])) {
             // Provide disable SMS option.
             $form['actions']['sms_disable'] = array(
               '#type' => 'submit',
               '#value' => t('Disable SMS delivery'),
-              '#limit_validation_errors' => array(),
-              '#submit' => array('tfa_basic_setup_form_submit'),
             );
           }
         }
         // Then validate by sending an SMS.
         else {
           $number = tfa_basic_format_number($form_state['storage']['sms_number']);
-          drupal_set_message(t("A code was sent to @number. It may take up to a minute for its arrival.", array('@number' => $number)));
+          drupal_set_message(t('A code was sent to @number. It may take up to a minute for its arrival.', array('@number' => $number)));
           $tfa_setup = $form_state['storage'][$method];
           $form = $tfa_setup->getForm($form, $form_state);
           if (in_array('app_setup', $form_state['storage']['methods'])) {
-            drupal_set_message(t("If the code does not arrive or you entered the wrong number skip this step to continue without SMS delivery. You can enable it after completing the rest of TFA setup."));
+            drupal_set_message(t('If the code does not arrive or you entered the wrong number skip this step to continue without SMS delivery. You can enable it after completing the rest of TFA setup.'));
           }
           else {
             $form['code']['#description'] .= ' ' . l(t('If the code does not arrive or you entered the wrong number click here to start over.'), 'user/' . $account->uid . '/security/tfa/sms-setup');
@@ -444,14 +447,14 @@ function tfa_basic_setup_form(&$form_state, $account, $method = 'app_setup') {
 
       default:
         break;
+
     }
+
     // Provide skip button for optional TFA plugins.
     if (isset($form_state['storage']['methods']) && count($form_state['storage']['methods']) > 1) {
       $form['actions']['skip'] = array(
         '#type' => 'submit',
         '#value' => t('Skip'),
-        '#limit_validation_errors' => array(),
-        '#submit' => array('tfa_basic_setup_form_submit'),
       );
     }
     // Provide cancel button on first step or single steps.
@@ -459,10 +462,9 @@ function tfa_basic_setup_form(&$form_state, $account, $method = 'app_setup') {
       $form['actions']['cancel'] = array(
         '#type' => 'submit',
         '#value' => t('Cancel'),
-        '#limit_validation_errors' => array(),
-        '#submit' => array('tfa_basic_setup_form_submit'),
       );
     }
+
     $form_state['storage']['method'] = $method;
   }
 
@@ -475,40 +477,50 @@ function tfa_basic_setup_form(&$form_state, $account, $method = 'app_setup') {
  */
 function tfa_basic_setup_form_validate($form, &$form_state) {
   global $user;
+
+  if (isset($form_state['values']['cancel']) && $form_state['values']['op'] === $form_state['values']['cancel']) {
+    return;
+  }
+
   $account = $form['account']['#value'];
   if (isset($form_state['values']['current_pass'])) {
-    // Allow administrators to change TFA settings for another account.
-    if ($account->uid != $user->uid && user_access('administer users')) {
-      $account = $user;
+    if (trim($form_state['values']['current_pass']) == '') {
+      form_set_error('current_pass', t('!name is required field.', array('!name' => $form['current_pass']['#title'])));
+
+      return;
     }
-    $current_pass = tfa_user_check_password($account->name, $form_state['values']['current_pass']);
-    if (!$current_pass) {
-      form_set_error('current_pass', t("Incorrect password."));
+
+    // Allow administrators to change TFA settings for another account.
+    $account_name = ($account->uid != $user->uid && user_access('administer users')) ? $user->name : $account->name;
+    $valid_password = tfa_user_check_password($account_name, $form_state['values']['current_pass']);
+    if (!$valid_password) {
+      form_set_error('current_pass', t('Incorrect password.'));
     }
 
     return;
   }
-  elseif (isset($form_state['values']['cancel']) && $form_state['values']['op'] === $form_state['values']['cancel']) {
-    return;
-  }
+
   // Handle first step of SMS setup.
-  elseif (isset($form_state['values']['sms_number'])) {
+  if (isset($form_state['values']['sms_number'])
+    && $form_state['values']['op'] == $form['send']['#value']
+  ) {
     // Validate number.
     $number = $form_state['values']['sms_number'];
     $number_errors = tfa_basic_valid_number($number);
     if (!empty($number_errors)) {
       foreach ($number_errors as $error) {
-        form_set_error('number', $error);
+        form_set_error('sms_number', $error);
       }
     }
 
     return;
   }
-  elseif (!empty($form_state['storage']['method'])) {
+
+  if (!empty($form_state['storage']['method'])) {
     $method = $form_state['storage']['method'];
     /** @var TfaSetup $tfa_setup */
-    $tfa_setup = $form_state['storage'][$method];
-    if (!$tfa_setup->validateForm($form, $form_state)) {
+    $tfa_setup = isset($form_state['storage'][$method]) ? $form_state['storage'][$method] : NULL;
+    if ($tfa_setup && !$tfa_setup->validateForm($form, $form_state)) {
       foreach ($tfa_setup->getErrorMessages() as $element => $message) {
         form_set_error($element, $message);
       }
@@ -525,7 +537,10 @@ function tfa_basic_setup_form_submit($form, &$form_state) {
   // Cancel button.
   if (isset($form_state['values']['cancel']) && $form_state['values']['op'] === $form_state['values']['cancel']) {
     drupal_set_message('TFA setup canceled.');
+    $form['#cache'] = FALSE;
+    $form_state['storage'] = NULL;
     $form_state['redirect'] = 'user/' . $account->uid . '/security/tfa';
+
     return;
   }
 
@@ -533,44 +548,61 @@ function tfa_basic_setup_form_submit($form, &$form_state) {
   if (isset($form_state['values']['current_pass'])) {
     $form_state['storage']['pass_confirmed'] = TRUE;
     $form_state['rebuild'] = TRUE;
-    return;
-  }
-  // Submitting mobile number step.
-  elseif (!empty($form_state['values']['sms_number'])) {
-    // Send code to number.
-    $form_state['storage']['sms_number'] = $form_state['values']['sms_number'];
-    $context = array('uid' => $account->uid, 'mobile_number' => $form_state['storage']['sms_number']);
-    $setup_plugin = new TfaBasicSmsSetup($context, $form_state['storage']['sms_number']);
-    $tfa_setup = new TfaSetup($setup_plugin, $context);
-    $tfa_setup->begin();
-    $errors = $tfa_setup->getErrorMessages();
-    if (!empty($errors)) {
-      foreach ($errors as $error) {
-        form_set_error('number', $error);
-      }
-    }
-    else {
-      // No errors so store setup.
-      $form_state['storage']['sms_setup'] = $tfa_setup;
-    }
-    $form_state['rebuild'] = TRUE;
 
     return;
+  }
+
+  // Submitting mobile number step.
+  if (!empty($form_state['values']['sms_number'])) {
+    if ($form_state['values']['op'] == $form['send']['#value']) {
+      // Send code to number.
+      $form_state['storage']['sms_number'] = $form_state['values']['sms_number'];
+      $context = array('uid' => $account->uid, 'mobile_number' => $form_state['storage']['sms_number']);
+      $setup_plugin = new TfaBasicSmsSetup($context, $form_state['storage']['sms_number']);
+      $tfa_setup = new TfaSetup($setup_plugin, $context);
+      $tfa_setup->begin();
+      $errors = $tfa_setup->getErrorMessages();
+      // @todo Activate this code.
+      $errors = array();
+      if (!empty($errors)) {
+        foreach ($errors as $key => $error) {
+          drupal_set_message($error, 'error');
+        }
+      }
+      else {
+        // No errors so store setup.
+        $form_state['storage']['sms_setup'] = $tfa_setup;
+      }
+
+      $form_state['rebuild'] = TRUE;
+
+      return;
+    }
   }
 
   // Disabling SMS delivery.
   if (isset($form_state['values']['sms_disable']) && $form_state['values']['op'] === $form_state['values']['sms_disable']) {
     tfa_basic_setup_save_data($account, array('sms' => FALSE));
     drupal_set_message(t('TFA SMS delivery disabled.'));
+
+    $form_state['storage'] = NULL;
     $form_state['redirect'] = 'user/' . $account->uid . '/security/tfa';
-    watchdog('tfa_basic', 'TFA SMS disabled for user @name UID !uid', array(
-      '@name' => $account->name,
-      '!uid' => $account->uid,
-    ), WATCHDOG_INFO);
+
+    watchdog(
+      'tfa_basic',
+      'TFA SMS disabled for user @name UID !uid',
+      array(
+        '@name' => $account->name,
+        '!uid' => $account->uid,
+      ),
+      WATCHDOG_INFO
+    );
+
     return;
   }
+
   // Submitting a plugin form.
-  elseif (!empty($form_state['storage']['method'])) {
+  if (!empty($form_state['storage']['method'])) {
     $method = $form_state['storage']['method'];
 
     // Support skipping optional steps.
@@ -583,7 +615,10 @@ function tfa_basic_setup_form_submit($form, &$form_state) {
       $setup_class = $form_state['storage'][$method];
       if (!$setup_class->submitForm($form, $form_state)) {
         drupal_set_message(t('There was an error during TFA setup. Your settings have not been saved.'), 'error');
+
+        $form_state['storage'] = NULL;
         $form_state['redirect'] = 'user/' . $account->uid . '/security/tfa';
+
         return;
       }
     }
@@ -597,11 +632,14 @@ function tfa_basic_setup_form_submit($form, &$form_state) {
 
       case 'sms_setup':
         if (isset($form_state['storage']['sms_number']) && in_array('sms_setup', $form_state['storage']['methods'])) {
+          $data = array('sms' => TRUE);
+
           // Update mobile number if different than stored.
           if ($form_state['storage']['sms_number'] !== tfa_basic_get_mobile_number($account)) {
+            $data['number'] = $form_state['storage']['sms_number'];
             tfa_basic_set_mobile_number($account, $form_state['storage']['sms_number']);
           }
-          tfa_basic_setup_save_data($account, array('sms' => TRUE));
+          tfa_basic_setup_save_data($account, $data);
         }
         break;
     }
@@ -619,17 +657,24 @@ function tfa_basic_setup_form_submit($form, &$form_state) {
 
     // Setup complete, return to overview page.
     drupal_set_message(t('TFA setup complete.'));
-    $form_state['redirect'] = 'user/' . $account->uid . '/security/tfa';
 
     // Log and notify if app was set up.
     if (in_array('app_setup', $form_state['storage']['methods'])) {
       $params = array('account' => $account);
       drupal_mail('tfa_basic', 'tfa_basic_tfa_enabled', $account->mail, user_preferred_language($account), $params);
-      watchdog('tfa_basic', 'TFA enabled for user @name UID !uid', array(
-        '@name' => $account->name,
-        '!uid' => $account->uid,
-      ), WATCHDOG_INFO);
+      watchdog(
+        'tfa_basic',
+        'TFA enabled for user @name UID !uid',
+        array(
+          '@name' => $account->name,
+          '!uid' => $account->uid,
+        ),
+        WATCHDOG_INFO
+      );
     }
+
+    $form_state['storage'] = NULL;
+    $form_state['redirect'] = 'user/' . $account->uid . '/security/tfa';
   }
 }
 
