@@ -26,7 +26,11 @@ class TfaTrustedDevice extends TfaBasePlugin implements TfaLoginPluginInterface 
   protected $domain;
 
   /**
-   * @var string
+   * Expiration in seconds.
+   *
+   * Default is 30 days. (3600 * 24 * 30)
+   *
+   * @var int
    */
   protected $expiration;
 
@@ -95,7 +99,12 @@ class TfaTrustedDevice extends TfaBasePlugin implements TfaLoginPluginInterface 
    */
   protected function generateDeviceId() {
     $id = base64_encode(drupal_random_bytes(32));
-    return strtr($id, array('+' => '-', '/' => '_', '=' => ''));
+
+    return strtr($id, array(
+      '+' => '-',
+      '/' => '_',
+      '=' => '',
+    ));
   }
 
   /**
@@ -350,7 +359,13 @@ class TfaTrustedDeviceSetup extends TfaTrustedDevice implements TfaSetupPluginIn
    * Get list of trusted devices.
    */
   public function getTrustedDevices() {
-    return db_query('SELECT did, name, created, ip, last_used FROM {tfa_trusted_device} WHERE uid = %d', $this->context['uid']);
+    $trusted_devices = array();
+    $result = db_query('SELECT did, name, created, ip, last_used FROM {tfa_trusted_device} WHERE uid = %d', $this->context['uid']);
+    while (($row = db_fetch_array($result))) {
+      $trusted_devices[$row['did']] = $row;
+    }
+
+    return $trusted_devices;
   }
 
   /**
