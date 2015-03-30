@@ -562,8 +562,6 @@ function tfa_basic_setup_form_submit($form, &$form_state) {
       $tfa_setup = new TfaSetup($setup_plugin, $context);
       $tfa_setup->begin();
       $errors = $tfa_setup->getErrorMessages();
-      // @todo Activate this code.
-      $errors = array();
       if (!empty($errors)) {
         foreach ($errors as $key => $error) {
           drupal_set_message($error, 'error');

@@ -126,6 +126,7 @@ function tfa_basic_setup_access($account, $permission = '') {
   $administer_users = user_access('administer users') && $account->uid > 0;
   $is_account = ($GLOBALS['user']->uid == $account->uid);
 
+  // @todo What if the TFA is disabled?
   return ($is_account && user_access($permission, $account)) || $administer_users;
 }
 

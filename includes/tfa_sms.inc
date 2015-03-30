@@ -88,11 +88,11 @@ class TfaBasicSms extends TfaBasePlugin implements TfaValidationPluginInterface,
    */
   public function validateForm(array $form, array &$form_state) {
     // If operation is resend then do not attempt to validate code.
-    if ($form_state['values']['op'] === $form['actions']['login']['#title']) {
+    if ($form_state['values']['op'] === $form['actions']['login']['#value']) {
       return TRUE;
     }
 
-    if ($form_state['values']['op'] === $form['actions']['resend']['#title']) {
+    if ($form_state['values']['op'] === $form['actions']['resend']['#value']) {
       if (trim($form_state['values']['code']) == '') {
         $this->errorMessages['code'] = t('!name field is required.', array('!name' => $form['code']['#title']));
 
