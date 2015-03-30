@@ -157,6 +157,13 @@ function tfa_basic_install() {
 }
 
 /**
+ * Implements hook_enable().
+ */
+function tfa_basic_enable() {
+  autoload_registry_rebuild();
+}
+
+/**
  * Implements hook_uninstall().
  */
 function tfa_basic_uninstall() {
