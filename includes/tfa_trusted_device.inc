@@ -244,11 +244,11 @@ class TfaTrustedDeviceSetup extends TfaTrustedDevice implements TfaSetupPluginIn
     );
 
     // Present option to trust this browser if its not currently trusted.
-    if (isset($_COOKIE[$this->cookieName]) && ($device_id = $this->trustedDevice($_COOKIE[$this->cookieName])) !== FALSE) {
-      $current_trusted = $device_id;
+    if (isset($_COOKIE[$this->cookieName]) && ($device_did = $this->trustedDevice($_COOKIE[$this->cookieName])) !== FALSE) {
+      $current_trusted_device_did = $device_did;
     }
     else {
-      $current_trusted = FALSE;
+      $current_trusted_device_did = FALSE;
       $form['trust'] = array(
         '#type' => 'checkbox',
         '#title' => t('Trust this browser?'),
@@ -283,12 +283,13 @@ class TfaTrustedDeviceSetup extends TfaTrustedDevice implements TfaSetupPluginIn
           '!time' => format_date($device['last_used']),
         );
 
-        if ($current_trusted == $device['id']) {
+        if ($current_trusted_device_did == $device['did']) {
           $name = '<strong>' . t('@name (current browser)', array('@name' => $device['name'])) . '</strong>';
         }
         else {
           $name = check_plain($device['name']);
         }
+
         if (empty($device['last_used'])) {
           $message = t('Marked trusted !set', $vars);
         }
@@ -296,7 +297,7 @@ class TfaTrustedDeviceSetup extends TfaTrustedDevice implements TfaSetupPluginIn
           $message = t('Marked trusted !set, last used for log in !time', $vars);
         }
 
-        $form['existing']['trusted_device_' . $device['id']] = array(
+        $form['existing']['trusted_device_' . $device['did']] = array(
           '#type' => 'checkbox',
           '#title' => $name,
           '#description' => $message,
