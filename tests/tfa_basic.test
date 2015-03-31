@@ -48,8 +48,6 @@ class TfaBasicTestCase extends DrupalWebTestCase {
     // Enable TFA module and the test module.
     parent::setUp('autoload', 'token', 'tfa', 'tfa_basic');
 
-    autoload_registry_rebuild();
-
     $this->ga = new PHPGangsta_GoogleAuthenticator();
     $this->webUserTfa = $this->drupalCreateUser(array(
       'access content',
