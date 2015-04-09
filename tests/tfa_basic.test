@@ -186,6 +186,20 @@ class TfaBasicTestCase extends DrupalWebTestCase {
     $this->assertText('My account');
   }
 
+  public function testRequired() {
+    variable_set('tfa_enabled', TRUE);
+    variable_set('tfa_validate_plugin', 'tfa_basic_totp');
+    // New account with the require TFA permission.
+    $account = $this->drupalCreateUser(array('access content'));
+    $edit = array(
+      'name' => $account->name,
+      'pass' => $account->pass_raw,
+    );
+    $this->drupalPost('user/login', $edit, 'Log in');
+    $this->assertNoLink('Log out', 'Not authenticated');
+    $this->assertText($this->uiStrings('required'), 'Required text shows');
+  }
+
   /**
    * TFA module user interface strings.
    *
@@ -242,6 +256,8 @@ class TfaBasicTestCase extends DrupalWebTestCase {
 
       case 'tfa-status-enabled':
         return 'TFA enabled';
+      case 'required':
+        return 'Login disallowed. You are required to set up two-factor authentication.';
     }
 
     return NULL;

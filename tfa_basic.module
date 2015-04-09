@@ -10,6 +10,10 @@
  */
 function tfa_basic_perm() {
   return array(
+    // Bypass forced TFA setup
+    // Enable this permission to allow a user who has not setup TFA to still log
+    // in.
+    'bypass tfa setup',
     // Set up TFA for account.
     // Allow users to set up TFA for their account. Users with
     // "administer users" permission can edit other account's TFA.
@@ -255,6 +259,17 @@ function tfa_basic_tfa_context_alter(&$context) {
       }
     }
   }
+}
+
+/**
+ * Implements hook_tfa_require().
+ */
+function tfa_basic_tfa_require($account) {
+  if (user_access('bypass tfa setup', $account)) {
+    return FALSE;
+  }
+  drupal_set_message(t('Login disallowed. You are required to set up two-factor authentication. Please contact a site administrator.'), 'error');
+  return TRUE;
 }
 
 /**
